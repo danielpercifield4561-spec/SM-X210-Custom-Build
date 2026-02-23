@@ -1,6 +1,8 @@
 # Kbuild Makefile for in-tree KernelSU-Next-Legacy integration
 obj-$(CONFIG_KSU) += kernelsu.o
 
+ccflags-y += -I$(srctree)/security/selinux/include
+
 # Combine all the .c files into one object named kernelsu.o
 kernelsu-objs := ksu.o \
                  allowlist.o \
