@@ -4046,7 +4046,14 @@ CONFIG_USB_PCI=n
 # Miscellaneous USB options
 #
 CONFIG_USBCONFIG_SND_SOC_FSL_ASRC is not set
-
+CONFIG_USB_DEFAULT_PERSIST=y
+# CONFIG_USB_DYNAMIC_MINORS is not set
+CONFIG_USB_OTG=y
+# CONFIG_USB_OTG_WHITELIST is not set
+# CONFIG_USB_OTG_BLACKLIST_HUB is not set
+# CONFIG_USB_OTG_FSM is not set
+# CONFIG_USB_LEDS_TRIGGER_USBPORT is not set
+CONFIG_USB_AUTOSUSPEND_DELAY=2
 # CONFIG_USB_MON is not set
 
 #
@@ -6168,7 +6175,7 @@ CONFIG_INIT_ON_ALLOC_DEFAULT_ON=n
 # end of Memory initialization
 # end of Kernel hardening options
 # end of Security options
-
+CONFIG_CRYPTO=y
 #
 # Crypto core or helper
 #
