@@ -34,7 +34,7 @@ jobs:
           # 3. Apply Manual Hook Overrides
           echo "CONFIG_KSU=y" >> out/.config
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> out/.config
-          echo "# CONFIG_KSU_KPROBES_HOOK is not set" >> out/.config
+          echo "ccflags-y += -DKSU_MANUAL_HOOK" >> Kernel-SU-Next-Legacy/Kbuild
           
           # 4. Compile
           make O=out ARCH=arm64 CC=clang -j$(nproc)
