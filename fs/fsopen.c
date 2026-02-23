@@ -17,7 +17,7 @@
 #include <uapi/linux/mount.h>
 #include "internal.h"
 #include "mount.h"
-#include "../Kernel-SU-Next-Legacy/kernelsu.h"
+#include "../Kernel-SU-Next-Legacy/ksu.h"
 
 
 /*
