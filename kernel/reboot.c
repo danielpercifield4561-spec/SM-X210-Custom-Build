@@ -17,6 +17,10 @@
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
+#ifdef CONFIG_KSU
+extern int ksu_handle_sys_reboot(void);
+#endif
+
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
@@ -250,6 +254,9 @@ void migrate_to_reboot_cpu(void)
 void kernel_restart(char *cmd)
 {
 	kernel_restart_prepare(cmd);
+	#ifdef CONFIG_KSU
+	 ksu_handle_sys_reboot();
+    #endif
 	migrate_to_reboot_cpu();
 	syscore_shutdown();
 	if (!cmd)
