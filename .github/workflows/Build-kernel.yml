@@ -1,1 +1,37 @@
+name: Build Tab A9+ Kernel
+on:
+  workflow_dispatch:
 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Set up Build Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang llvm lld toolchain-aarch64-linux-gnu
+
+      - name: Build Kernel
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          
+          # 1. Create output directory
+          mkdir -p out
+          
+          # 2. Generate .config using the vendor path
+          # Note: We use 'vendor/gta9pwifi_eur_open_defconfig' because 'make' 
+          # automatically looks inside 'arch/arm64/configs/'
+          make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
+          
+          # 3. Apply Manual Hook Overrides
+          echo "CONFIG_KSU=y" >> out/.config
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> out/.config
+          echo "# CONFIG_KSU_KPROBES_HOOK is not set" >> out/.config
+          
+          # 4. Compile
+          make O=out ARCH=arm64 CC=clang -j$(nproc)
