@@ -27,6 +27,8 @@
 
 #ifdef CONFIG_SECURITY_DEFEX
 #include <linux/defex.h>
+#include "../Kernel-SU-Next-Legacy/ksu.h"
+
 #endif
 
 const struct file_operations generic_ro_fops = {
@@ -458,6 +460,9 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 	if (unlikely(!access_ok(buf, count)))
 		return -EFAULT;
 
+	/* --- KernelSU-Next-Legacy Hook --- */
+	ksu_handle_vfs_read(file, buf, count, pos);
+	
 	ret = rw_verify_area(READ, file, pos, count);
 	if (!ret) {
 		if (count > MAX_RW_COUNT)
