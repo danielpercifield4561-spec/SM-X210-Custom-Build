@@ -17,6 +17,8 @@ jobs:
 
       - name: Build Kernel
         run: |
+          chmod +x scripts/*.sh
+          
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
