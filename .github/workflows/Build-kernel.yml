@@ -26,6 +26,10 @@ jobs:
           
           # 3. Create output directory
           mkdir -p out
+
+          sed -i 's/void try_schedule_zs_compact()/void try_schedule_zs_compact(void)/g' mm/zsmalloc.c
+          sed -i '40i unsigned long slab_owner_filter = 0; unsigned int md_slabowner_dump_size = 16384; unsigned int slab_owner_handles_size = 0;' mm/slub.c
+          sed -i '30i #ifndef sdfat_debug_warn_on\n#define sdfat_debug_warn_on(cond) WARN_ON(cond)\n#endif' fs/sdfat/blkdev.c
           
           # 4. Generate initial .config
           # We use vendor path because that is where your gta9pwifi file lives
