@@ -18,6 +18,9 @@
 #ifdef CONFIG_COMPAT_VDSO
 #include <generated/vdso32-offsets.h>
 #endif
+/* Manual fix for Clang vdso_offset_sigtramp error */
+extern unsigned long vdso_offset_sigtramp;
+
 
 #define VDSO_SYMBOL(base, name)						   \
 ({									   \
