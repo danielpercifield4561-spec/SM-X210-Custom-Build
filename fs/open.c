@@ -32,7 +32,7 @@
 #include <linux/ima.h>
 #include <linux/dnotify.h>
 #include <linux/compat.h>
-#include <../Kernel-SU-Next-Legacy/ksu.h>
+#include "../Kernel-SU-Next-Legacy/ksu.h"
 
 #ifdef CONFIG_SECURITY_DEFEX
 #include <linux/defex.h>
