@@ -1,6 +1,6 @@
 name: Build Tab A9+ Kernel
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger from Actions tab
 
 jobs:
   build:
@@ -9,32 +9,46 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Set up Build Environment
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang llvm lld gcc-aarch64-linux-gnu
 
-
       - name: Build Kernel
         run: |
+          # 1. Fix script permissions to prevent "Permission Denied"
           chmod +x scripts/*.sh
           
+          # 2. Set Environment Variables
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # 1. Create output directory
+          # 3. Create output directory
           mkdir -p out
           
-          # 2. Generate .config using the vendor path
-          # Note: We use 'vendor/gta9pwifi_eur_open_defconfig' because 'make' 
-          # automatically looks inside 'arch/arm64/configs/'
+          # 4. Generate initial .config
+          # We use vendor path because that is where your gta9pwifi file lives
           make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
           
-          # 3. Apply Manual Hook Overrides
+          # 5. Apply Manual Hook Overrides
+          # These tell the code to activate KernelSU
           echo "CONFIG_KSU=y" >> out/.config
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> out/.config
+          echo "# CONFIG_KSU_KPROBES_HOOK is not set" >> out/.config
+          
+          # 6. FORCE Manual Hook Definition
+          # This fixes the "No hooks were defined" error by injecting the flag into Kbuild
           echo "ccflags-y += -DKSU_MANUAL_HOOK" >> Kernel-SU-Next-Legacy/Kbuild
           
-          # 4. Compile
-          make O=out ARCH=arm64 CC=clang -j$(nproc)
+          # 7. Auto-resolve new config questions to prevent "End of file" errors
+          make O=out ARCH=arm64 olddefconfig
+          
+          # 8. Main Compilation
+          make O=out ARCH=arm64 CC=clang -j2
+
+      - name: Upload Kernel Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tab-A9-Plus-Kernel
+          path: out/arch/arm64/boot/Image
