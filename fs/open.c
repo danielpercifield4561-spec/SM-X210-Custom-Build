@@ -12,6 +12,7 @@
 #include <linux/fsnotify.h>
 #include <linux/module.h>
 #include <linux/tty.h>
+#include "../Kernel-SU-Next-Legacy/kernel/ksu.h"
 #include <linux/namei.h>
 #include <linux/backing-dev.h>
 #include <linux/capability.h>
@@ -32,7 +33,6 @@
 #include <linux/ima.h>
 #include <linux/dnotify.h>
 #include <linux/compat.h>
-#include "../Kernel-SU-Next-Legacy/ksu.h"
 
 #ifdef CONFIG_SECURITY_DEFEX
 #include <linux/defex.h>
