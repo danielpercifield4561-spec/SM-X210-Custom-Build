@@ -20,6 +20,8 @@
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
+#include "../Kernel-SU-Next-Legacy/ksu.h"
+
 
 /**
  * generic_fillattr - Fill in the basic attributes from the inode struct
@@ -171,6 +173,9 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
 	struct path path;
 	int error = -EINVAL;
 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
+
+		/* --- KernelSU-Next-Legacy Hook --- */
+	ksu_handle_stat(&dfd, &filename, &flags);
 
 	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
 		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
