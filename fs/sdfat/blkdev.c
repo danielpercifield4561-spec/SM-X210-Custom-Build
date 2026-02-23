@@ -31,6 +31,9 @@
 #include <linux/backing-dev.h>
 
 #include "sdfat.h"
+#ifndef sdfat_debug_warn_on
+#define sdfat_debug_warn_on(cond) WARN_ON(cond)
+#endif
 
 /*----------------------------------------------------------------------*/
 /*  Constant & Macro Definitions                                        */
