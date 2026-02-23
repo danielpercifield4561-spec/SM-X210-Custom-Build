@@ -17,6 +17,8 @@
 #include <uapi/linux/mount.h>
 #include "internal.h"
 #include "mount.h"
+#include "../drivers/kernelsu/kernelsu.h"
+
 
 /*
  * Allow the user to read back any error, warning or informational messages.
