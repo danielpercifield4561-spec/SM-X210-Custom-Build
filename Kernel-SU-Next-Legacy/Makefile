@@ -1,3 +1,8 @@
+ccflags-y += -DCONFIG_KSU
+ccflags-y += -DCONFIG_KSU_NEXT
+ccflags-y += -DCONFIG_KSU_NEXT_MANUAL_HOOK
+
+
 # Kbuild Makefile for in-tree KernelSU-Next-Legacy integration
 obj-$(CONFIG_KSU) += kernelsu.o
 
