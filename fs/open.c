@@ -1094,7 +1094,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
 
-	 ksu_handle_openat(&dfd, (const char __user **)&tmp->name, &flags, &mode);
+	 ksu_handle_faccessat(&dfd, (const char __user **)&tmp->name, &mode, NULL);
 
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
