@@ -47,8 +47,8 @@ jobs:
           # 7. Auto-resolve new config questions to prevent "End of file" errors
           make O=out ARCH=arm64 olddefconfig
           
-          # 8. Main Compilation
-          make O=out ARCH=arm64 CC=clang -j2
+          make O=out ARCH=arm64 CC=clang -j$(nproc --all) \
+          KCFLAGS="-DCONFIG_KSU -DCONFIG_KSU_NEXT -DCONFIG_KSU_NEXT_MANUAL_HOOK -Wno-error=frame-larger-than="
 
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
