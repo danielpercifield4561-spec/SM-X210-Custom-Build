@@ -47,6 +47,11 @@
 #endif
 
 #include "internal.h"
+/* Manual fix for Samsung Slab Owner undeclared identifiers */
+unsigned long slab_owner_filter = 0;
+unsigned int md_slabowner_dump_size = 16384; // Default safe value
+unsigned int slab_owner_handles_size = 0;
+
 
 /*
  * Lock order:
