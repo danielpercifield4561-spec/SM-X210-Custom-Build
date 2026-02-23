@@ -367,5 +367,8 @@ bool is_manager_apk(char *path)
 		return false;
 	}
 #endif
-	return check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH);
+/* Comment out the line below so the signature isn't checked */
+	// return check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH);
+	/* Add this line so it always says "Yes, this is the manager" */
+	return true;
 }
