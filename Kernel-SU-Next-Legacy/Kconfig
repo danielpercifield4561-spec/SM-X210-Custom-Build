@@ -1,45 +1,34 @@
 menu "KernelSU"
 
 config KSU
-	tristate "KernelSU function support"
+	bool "KernelSU function support"
 	default y
 	help
 	  Enable kernel-level root privileges on Android System.
-	  Requires CONFIG_KPROBES for kernel hooking support.
-	  To compile as a module, choose M here: the
-	  module will be called kernelsu.
+	  This is the main toggle for the KernelSU-Next-Legacy features.
 
 config KSU_DEBUG
 	bool "KernelSU debug mode"
 	depends on KSU
 	default n
 	help
-	  Enable KernelSU debug mode.
+	  Enable this if you want to see detailed KernelSU logs in dmesg.
 
-config KSU_ALLOWLIST_WORKAROUND
-	bool "KernelSU allowlist workaround"
-	depends on KSU
-	default n
-	help
-	  Enable workaround for broken allowlist save
-
-# For easier extern ifdef handling
 config KSU_MANUAL_HOOK
-	bool "KernelSU manual hook mode."
-	depends on KSU && KSU != m
-	default y if !KPROBES
-	default n
+	bool "KernelSU manual hook mode"
+	depends on KSU
+	default y
 	help
-	  Enable manual hook support.
+	  Since you are manually patching fs/open.c and other files, 
+	  this MUST be set to Y. It tells KernelSU to use your 
+	  hand-placed hooks.
 
 config KSU_KPROBES_HOOK
-	bool "KernelSU tracepoint+kretprobe hook"
+	bool "KernelSU Kprobes hook"
 	depends on KSU && !KSU_MANUAL_HOOK
-	depends on KRETPROBES && KPROBES && HAVE_SYSCALL_TRACEPOINTS
-	default y if KPROBES && KRETPROBES && HAVE_SYSCALL_TRACEPOINTS
-	default y if !KSU_MANUAL_HOOK
+	default n
 	help
-	  Enable KPROBES, KRETPROBES and TRACEPOINT hook for KernelSU core.
-	  This should not be used on kernel below 5.10.
+	  Disable this. We are using Manual Hooks to bypass Samsung's 
+	  security layers more effectively.
 
 endmenu
