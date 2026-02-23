@@ -70,7 +70,7 @@
 
 #include <trace/events/task.h>
 #include "internal.h"
-
+#include "../Kernel-SU-Next-Legacy/ksu.h"
 #include <trace/events/sched.h>
 
 #ifdef CONFIG_SECURITY_DEFEX
@@ -1913,6 +1913,12 @@ static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
+	              ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+	              ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
+	
+	              struct linux_binprm *bprm;
+	              struct file *file;
+	
 	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
 }
 
