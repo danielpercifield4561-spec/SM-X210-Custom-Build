@@ -352,6 +352,8 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
  */
 long do_faccessat(int dfd, const char __user *filename, int mode)
 {
+	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+	
 	const struct cred *old_cred;
 	struct cred *override_cred;
 	struct path path;
@@ -1093,8 +1095,6 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
-
-	 ksu_handle_faccessat(&dfd, (const char __user **)&tmp->name, &mode, NULL);
 
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
