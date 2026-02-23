@@ -20,7 +20,7 @@
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
-#include "../Kernel-SU-Next-Legacy/ksu.h"
+#include <ksu.h>
 
 
 /**
@@ -170,12 +170,12 @@ EXPORT_SYMBOL(vfs_statx_fd);
 int vfs_statx(int dfd, const char __user *filename, int flags,
 	      struct kstat *stat, u32 request_mask)
 {
-	ksu_handle_stat(&dfd, &filename, &flags);
 	
 	struct path path;
 	int error = -EINVAL;
 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
-
+    ksu_handle_stat(&dfd, &filename, &flags);
+	
 	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
 		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
 		return -EINVAL;
