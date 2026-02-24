@@ -494,8 +494,8 @@ LINUXINCLUDE    := \
 		$(if $(building_out_of_srctree),-I$(srctree)/include) \
 		-I$(objtree)/include \
 		$(USERINCLUDE)
-LINUXINCLUDE    += -I$(srctree)/drivers/kernelsu/kernel/ksu.h \
-LINUXINCLUDE    += -I$(srctree)/drivers/kernelsu/ \
+LINUXINCLUDE    := -I$(srctree)/drivers/kernelsu
+
 KBUILD_AFLAGS   := -D__ASSEMBLY__ -fno-PIE
 KBUILD_CFLAGS   := -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common -fshort-wchar -fno-PIE \
