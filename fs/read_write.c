@@ -21,14 +21,12 @@
 #include <linux/mount.h>
 #include <linux/fs.h>
 #include "internal.h"
-
+#include <kernelsu/kernel/ksu.h>
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
 #ifdef CONFIG_SECURITY_DEFEX
 #include <linux/defex.h>
-#include "../Kernel-SU-Next-Legacy/ksu.h"
-
 #endif
 
 const struct file_operations generic_ro_fops = {
