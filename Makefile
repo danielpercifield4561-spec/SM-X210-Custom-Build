@@ -2007,4 +2007,3 @@ FORCE:
 .PHONY: $(PHONY)
 
 obj-y += kernelsu/
-obj-y += kernelsu/kernel
