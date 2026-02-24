@@ -12,7 +12,7 @@
 #include <linux/fsnotify.h>
 #include <linux/module.h>
 #include <linux/tty.h>
-#include "../Kernel-SU-Next-Legacy/kernel/ksu.h"
+#include <drivers/kernelsu/kernel/ksu.h>
 #include <linux/namei.h>
 #include <linux/backing-dev.h>
 #include <linux/capability.h>
