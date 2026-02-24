@@ -16,39 +16,49 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # 1. Fix script permissions to prevent "Permission Denied"
-          chmod +x scripts/*.sh
+          # 1. CLEAN & PERMISSIONS
+          # Deep clean permissions for all scripts, including the Python wrappers
+          find scripts/ -type f -exec chmod +x {} +
+          chmod +x drivers/kernelsu/patch.sh || true
           
-          # 2. Set Environment Variables
+          # Create fresh output directory
+          rm -rf out
+          mkdir -p out
+          
+          # 2. SET ENVIRONMENT
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CC=clang
           
-          # 3. Create output directory
-          mkdir -p out
-
+          # 3. CODE PATCHES (Manual fixes)
+          # Fix zsmalloc prototype
           sed -i 's/void try_schedule_zs_compact()/void try_schedule_zs_compact(void)/g' mm/zsmalloc.c
+          # Fix sdfat debug macro
           sed -i '30i #ifndef sdfat_debug_warn_on\n#define sdfat_debug_warn_on(cond) WARN_ON(cond)\n#endif' fs/sdfat/blkdev.c
+          # Ensure KSU has a Makefile (mirroring Kbuild)
+          cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
           
-          # 4. Generate initial .config
-          # We use vendor path because that is where your gta9pwifi file lives
+          # 4. CONFIGURATION
+          # Load the Samsung defconfig
           make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
           
-          # 5. Apply Manual Hook Overrides
-          # These tell the code to activate KernelSU
-          echo "CONFIG_KSU=y" >> out/.config
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> out/.config
-          echo "# CONFIG_KSU_KPROBES_HOOK is not set" >> out/.config
+          # Inject KSU configs directly into the .config
+          scripts/config --file out/.config --enable KSU
+          scripts/config --file out/.config --enable KSU_NEXT
+          scripts/config --file out/.config --enable KSU_NEXT_MANUAL_HOOK
+          scripts/config --file out/.config --disable KSU_NEXT_KPROBES_HOOK
           
-          # 6. FORCE Manual Hook Definition
-          # This fixes the "No hooks were defined" error by injecting the flag into Kbuild
+          # Force the manual hook flag into the KSU build
           echo "ccflags-y += -DKSU_MANUAL_HOOK" >> drivers/kernelsu/Kbuild
           
-          # 7. Auto-resolve new config questions to prevent "End of file" errors
+          # Sync the config
           make O=out ARCH=arm64 olddefconfig
           
-          make O=out ARCH=arm64 CC=clang -j$(nproc --all) \
-          KCFLAGS="-DCONFIG_KSU -DCONFIG_KSU_NEXT -DCONFIG_KSU_NEXT_MANUAL_HOOK -Wno-error=frame-larger-than="
+          # 5. FINAL BUILD
+          # We pass ARCH and CROSS_COMPILE explicitly in the make command to prevent variable leakage
+          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- -j$(nproc --all) \
+          KCFLAGS="-Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
 
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
