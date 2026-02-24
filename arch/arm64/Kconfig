@@ -1870,7 +1870,7 @@ source "drivers/acpi/Kconfig"
 
 source "arch/arm64/kvm/Kconfig"
 
-source "Kernel-SU-Next-Legacy/Kconfig"
+source "drivers/kernelsu/Kconfig"
 
 if CRYPTO
 source "arch/arm64/crypto/Kconfig"
