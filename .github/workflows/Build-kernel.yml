@@ -16,44 +16,42 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # 1. Fix permissions for EVERYTHING in scripts
-          # This prevents the 'gcc-wrapper.py' permission issues that cause the LINUXINCLUDE leak
+          # 1. Clean environment and permissions
           find scripts/ -type f -exec chmod +x {} +
-          chmod +x drivers/kernelsu/patch.sh || true
+          find . -type f -name "*.sh" -exec chmod +x {} +
           
-          # 2. Setup Build Environment
+          # 2. Setup Environment
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CC=clang
           
-          # 3. Code Fixes (Automated for GitHub Actions)
-          sed -i 's/void try_schedule_zs_compact()/void try_schedule_zs_compact(void)/g' mm/zsmalloc.c
-          sed -i '30i #ifndef sdfat_debug_warn_on\n#define sdfat_debug_warn_on(cond) WARN_ON(cond)\n#endif' fs/sdfat/blkdev.c
+          # 3. Code Fixes
+          # Ensure KSU is in drivers and has a Makefile
+          if [ -d "Kernel-SU-Next-Legacy" ]; then mv Kernel-SU-Next-Legacy drivers/kernelsu; fi
+          cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
           
-          # 4. KSU Setup
-          # Create a fake git environment to fix those version warnings
-          cd drivers/kernelsu
-          git init && git config user.email "build@example.com" && git config user.name "Builder"
-          git add . && git commit -m "init" && git tag v1.0.1
-          cp Kbuild Makefile
-          cd ../..
+          # Add KSU to the drivers Makefile if not there
+          if ! grep -q "kernelsu" drivers/Makefile; then
+            echo 'obj-y += kernelsu/' >> drivers/Makefile
+          fi
 
-          # 5. Build Configuration
-          mkdir -p out
-          make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
+          # 4. Configuration (Building in ROOT now)
+          make ARCH=arm64 HOSTCC=gcc vendor/gta9pwifi_eur_open_defconfig
           
-          # Use scripts/config to enable KSU properly
-          ./scripts/config --file out/.config --enable KSU
-          ./scripts/config --file out/.config --enable KSU_NEXT
-          ./scripts/config --file out/.config --enable KSU_NEXT_MANUAL_HOOK
+          ./scripts/config --enable KSU
+          ./scripts/config --enable KSU_NEXT
+          ./scripts/config --enable KSU_NEXT_MANUAL_HOOK
           
-          make O=out ARCH=arm64 olddefconfig
+          make ARCH=arm64 HOSTCC=gcc olddefconfig
 
-          make O=out ARCH=arm64 CC=clang HOSTCC=gcc CLANG_TRIPLE=aarch64-linux-gnu- -j$(nproc --all) \
-          KCFLAGS="-I$SRC_DIR/include -I$SRC_DIR/arch/arm64/include -Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
- 
+          # 5. The Build Command
+          # Note: No O=out here. The Image will be in arch/arm64/boot/Image
+          make ARCH=arm64 CC=clang HOSTCC=gcc CLANG_TRIPLE=aarch64-linux-gnu- -j$(nproc --all) \
+          KCFLAGS="-Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration -Wno-int-conversion"
+
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
         with:
           name: Tab-A9-Plus-Kernel
-          path: out/arch/arm64/boot/Image
+          path: arch/arm64/boot/Image
