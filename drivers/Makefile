@@ -194,5 +194,5 @@ obj-$(CONFIG_GUARDIANM_SEC)	+= guardianm/
 
 obj-y				+= samsung/
 
-obj-y       += "../Kernel-SU-Next-Legacy/"
+obj-y       += kernelsu/
 
