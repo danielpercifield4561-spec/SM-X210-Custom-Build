@@ -42,7 +42,7 @@ jobs:
           
           # 6. FORCE Manual Hook Definition
           # This fixes the "No hooks were defined" error by injecting the flag into Kbuild
-          echo "ccflags-y += -DKSU_MANUAL_HOOK" >> Kernel-SU-Next-Legacy/Kbuild
+          echo "ccflags-y += -DKSU_MANUAL_HOOK" >> drivers/kernelsu/Kbuild
           
           # 7. Auto-resolve new config questions to prevent "End of file" errors
           make O=out ARCH=arm64 olddefconfig
