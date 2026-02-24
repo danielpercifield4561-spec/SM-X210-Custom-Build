@@ -21,7 +21,7 @@
 #include <linux/mount.h>
 #include <linux/fs.h>
 #include "internal.h"
-#include <drivers/kernelsu/kernel/ksu.h>
+#include "../drivers/kernelsu/kernel/ksu.h"
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
