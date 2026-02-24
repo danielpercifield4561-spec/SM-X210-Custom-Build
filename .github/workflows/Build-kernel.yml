@@ -49,11 +49,9 @@ jobs:
           
           make O=out ARCH=arm64 olddefconfig
 
-          # 6. The Final Build Command
-          # Passing the variables directly in the make command is safer than relying only on exports
-          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- -j$(nproc --all) \
-          KCFLAGS="-Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
-
+          make O=out ARCH=arm64 CC=clang HOSTCC=gcc CLANG_TRIPLE=aarch64-linux-gnu- -j$(nproc --all) \
+          KCFLAGS="-I$SRC_DIR/include -I$SRC_DIR/arch/arm64/include -Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
+ 
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
         with:
