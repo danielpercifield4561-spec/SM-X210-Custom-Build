@@ -68,7 +68,7 @@
 #include <asm/tlb.h>
 #include <trace/events/task.h>
 #include "internal.h"
-#include <kernelsu/kernel/ksu.h>
+#include "../drivers/kernelsu/kernel/ksu.h"
 #include <trace/events/sched.h>
 
 #ifdef CONFIG_SECURITY_DEFEX
