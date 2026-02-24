@@ -16,47 +16,41 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # 1. CLEAN & PERMISSIONS
-          # Deep clean permissions for all scripts, including the Python wrappers
+          # 1. Fix permissions for EVERYTHING in scripts
+          # This prevents the 'gcc-wrapper.py' permission issues that cause the LINUXINCLUDE leak
           find scripts/ -type f -exec chmod +x {} +
           chmod +x drivers/kernelsu/patch.sh || true
           
-          # Create fresh output directory
-          rm -rf out
-          mkdir -p out
-          
-          # 2. SET ENVIRONMENT
+          # 2. Setup Build Environment
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
-          export CC=clang
           
-          # 3. CODE PATCHES (Manual fixes)
-          # Fix zsmalloc prototype
+          # 3. Code Fixes (Automated for GitHub Actions)
           sed -i 's/void try_schedule_zs_compact()/void try_schedule_zs_compact(void)/g' mm/zsmalloc.c
-          # Fix sdfat debug macro
           sed -i '30i #ifndef sdfat_debug_warn_on\n#define sdfat_debug_warn_on(cond) WARN_ON(cond)\n#endif' fs/sdfat/blkdev.c
-          # Ensure KSU has a Makefile (mirroring Kbuild)
-          cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
           
-          # 4. CONFIGURATION
-          # Load the Samsung defconfig
+          # 4. KSU Setup
+          # Create a fake git environment to fix those version warnings
+          cd drivers/kernelsu
+          git init && git config user.email "build@example.com" && git config user.name "Builder"
+          git add . && git commit -m "init" && git tag v1.0.1
+          cp Kbuild Makefile
+          cd ../..
+
+          # 5. Build Configuration
+          mkdir -p out
           make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
           
-          # Inject KSU configs directly into the .config
-          scripts/config --file out/.config --enable KSU
-          scripts/config --file out/.config --enable KSU_NEXT
-          scripts/config --file out/.config --enable KSU_NEXT_MANUAL_HOOK
-          scripts/config --file out/.config --disable KSU_NEXT_KPROBES_HOOK
+          # Use scripts/config to enable KSU properly
+          ./scripts/config --file out/.config --enable KSU
+          ./scripts/config --file out/.config --enable KSU_NEXT
+          ./scripts/config --file out/.config --enable KSU_NEXT_MANUAL_HOOK
           
-          # Force the manual hook flag into the KSU build
-          echo "ccflags-y += -DKSU_MANUAL_HOOK" >> drivers/kernelsu/Kbuild
-          
-          # Sync the config
           make O=out ARCH=arm64 olddefconfig
-          
-          # 5. FINAL BUILD
-          # We pass ARCH and CROSS_COMPILE explicitly in the make command to prevent variable leakage
+
+          # 6. The Final Build Command
+          # Passing the variables directly in the make command is safer than relying only on exports
           make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- -j$(nproc --all) \
           KCFLAGS="-Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
 
