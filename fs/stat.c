@@ -20,7 +20,7 @@
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
-#include <drivers/kernelsu/kernel/ksu.h>
+#include "../drivers/kernelsu/kernel/ksu.h"
 
 
 /**
