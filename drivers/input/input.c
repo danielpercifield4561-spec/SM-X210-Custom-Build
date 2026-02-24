@@ -25,7 +25,7 @@
 #include <linux/rcupdate.h>
 #include "input-compat.h"
 #include "input-poller.h"
-#include "../Kernel-SU-Next-Legacy/ksu.h"
+#include <kernelsu/kernel/ksu.h>
 
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
