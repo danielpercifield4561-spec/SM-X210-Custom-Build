@@ -63,14 +63,13 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
-#include "../Kernel-SU-Next-Legacy/ksu.h"
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
 
 #include <trace/events/task.h>
 #include "internal.h"
-#include "../Kernel-SU-Next-Legacy/ksu.h"
+#include <kernelsu/kernel/ksu.h>
 #include <trace/events/sched.h>
 
 #ifdef CONFIG_SECURITY_DEFEX
