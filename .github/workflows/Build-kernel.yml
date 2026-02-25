@@ -17,27 +17,20 @@ jobs:
 
       - name: 📁 Setup & Permissions
         run: |
-          # 1. Essential Permissions
           find scripts/ -type f -exec chmod +x {} + || true
           chmod +x scripts/gcc-wrapper.py || true
           
-          # 2. Add KSU to the kernel's main compile list
+          # Add KSU to the kernel's main compile list
           if ! grep -q "kernelsu" drivers/Makefile; then
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
           
-          # 3. Global Link: Allows drivers/input/input.c to find <kernelsu/kernel/ksu.h>
-          mkdir -p include/kernelsu
-          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu || true
-          
-          # 4. Internal Link: Allows ksu.c to find the real allowlist.h sitting one folder up
+          # Internal Link: Allows ksu.c to find the real allowlist.h sitting one folder up
           ln -sf $(pwd)/drivers/kernelsu/allowlist.h $(pwd)/drivers/kernelsu/kernel/allowlist.h || true
 
       - name: 🩹 Apply Deep Source Code Fixes
         run: |
-          # We use '|' instead of '/' in sed to prevent silent syntax crashes
-          
-          # 1. ARM64 Stack Pointer & KGDB Fixes (Crucial for modern Clang)
+          # 1. ARM64 Stack Pointer & KGDB Fixes
           sed -i 's|register unsigned long current_stack_pointer asm ("sp");|/* Removed global sp */ #define current_stack_pointer ({ unsigned long sp; asm("mov %0, sp" : "=r"(sp)); sp; })|g' arch/arm64/include/asm/stack_pointer.h || true
           sed -i 's|"brk %0" : : "I"|"brk %0" : : "n"|g' arch/arm64/include/asm/kgdb.h || true
           
@@ -50,13 +43,6 @@ jobs:
           # 4. Focaltech Dummy Firmware Fix
           mkdir -p drivers/input/touchscreen/focaltech_touch_spi/include/firmware
           touch drivers/input/touchscreen/focaltech_touch_spi/include/firmware/fw_sample.i || true
-          
-          # 5. Techpack Audio & Camera Prototype Fixes
-          sed -i 's|void fsm_mutex_lock()|void fsm_mutex_lock(void)|g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c || true
-          sed -i 's|void fsm_mutex_unlock()|void fsm_mutex_unlock(void)|g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c || true
-          sed -i 's|msm_audio_add_qos_request()|msm_audio_add_qos_request(void)|g' techpack/audio/asoc/holi.c || true
-          sed -i 's|msm_audio_remove_qos_request()|msm_audio_remove_qos_request(void)|g' techpack/audio/asoc/holi.c || true
-          sed -i 's|cam_debug_get_settings()|cam_debug_get_settings(void)|g' techpack/camera/drivers/cam_utils/cam_debug_util.c || true
 
       - name: ⚙️ Generate Kernel Configuration
         run: |
@@ -74,8 +60,8 @@ jobs:
 
       - name: 🔨 Compile Kernel (The Big Hammer)
         run: |
-          # CC Target override fixes the VDSO assembler error
-          # We also add -I$(pwd)/drivers/kernelsu to ensure all KSU files find each other
+          # Notice the new '-I$(pwd)/drivers' flag in KCFLAGS.
+          # This guarantees input.c will find <kernelsu/kernel/ksu.h>
           make ARCH=arm64 \
           CC="clang --target=aarch64-linux-gnu" \
           REAL_CC="clang --target=aarch64-linux-gnu" \
@@ -85,7 +71,7 @@ jobs:
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-I$(pwd)/drivers/kernelsu -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+          KCFLAGS="-I$(pwd)/drivers -I$(pwd)/drivers/kernelsu -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
 
       - name: 📦 Package Output for Flashing
         run: |
