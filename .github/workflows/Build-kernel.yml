@@ -41,16 +41,17 @@ jobs:
           ./scripts/config --enable KSU_NEXT_MANUAL_HOOK
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
-
-          # 5. THE BUILD (With Manual Path Injection)
-          # We manually point to the include folder to bypass the broken wrapper logic
+          
+          # The Final Build Command
+          # We add the specific ASM include paths to KCFLAGS
           make ARCH=arm64 \
           CC=clang \
           HOSTCC=gcc \
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j1 \
-          KCFLAGS="-I$(pwd)/include -I$(pwd)/arch/arm64/include -Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
+          KCFLAGS="-I$(pwd)/include -I$(pwd)/arch/arm64/include -I$(pwd)/arch/arm64/include/generated -I$(pwd)/include/uapi -I$(pwd)/arch/arm64/include/uapi -I$(pwd)/arch/arm64/include/generated/uapi -Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
+
 
 
       - name: Upload Kernel Image
