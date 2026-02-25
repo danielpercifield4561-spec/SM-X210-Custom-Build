@@ -16,27 +16,22 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # 1. Clean Slate & Permissions
-          # Wipe everything to ensure no leftover junk from previous failed runs
-          make clean
-          make mrproper
-          find . -type f -name "*.sh" -exec chmod +x {} +
+          # 1. FORCE SCRIPT PERMISSIONS
+          # We target the specific wrapper causing the 'Permission denied'
+          chmod +x scripts/gcc-wrapper.py
           find scripts/ -type f -exec chmod +x {} +
+          find . -type f -name "*.sh" -exec chmod +x {} +
           
-          # 2. Setup Strict Environment
+          # 2. SETUP ENVIRONMENT
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # 3. KSU Setup
+          # 3. KSU FOLDER & MAKEFILE
           if [ -d "Kernel-SU-Next-Legacy" ]; then mv Kernel-SU-Next-Legacy drivers/kernelsu; fi
           cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
-          if ! grep -q "kernelsu" drivers/Makefile; then
-            echo 'obj-y += kernelsu/' >> drivers/Makefile
-          fi
-
-          # 4. Configuration
-          # We tell the system to use GCC for the config tools
+          
+          # 4. CONFIGURATION (Strict GCC for tools)
           make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
           
           ./scripts/config --disable SECURITY_DEFEX
@@ -47,15 +42,16 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-          # 5. The Build Command
-          # CC_FOR_BUILD=gcc ensures scripts/mod/empty.o is built correctly on the runner
+          # 5. THE BUILD (With Manual Path Injection)
+          # We manually point to the include folder to bypass the broken wrapper logic
           make ARCH=arm64 \
           CC=clang \
           HOSTCC=gcc \
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j1 \
-          KCFLAGS="-Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration -Wno-int-conversion"
+          KCFLAGS="-I$(pwd)/include -I$(pwd)/arch/arm64/include -Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
+
 
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
