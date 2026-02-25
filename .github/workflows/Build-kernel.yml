@@ -16,38 +16,45 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # 1. Clean environment and permissions
-          find scripts/ -type f -exec chmod +x {} +
+          # 1. Clean Slate & Permissions
+          # Wipe everything to ensure no leftover junk from previous failed runs
+          make clean
+          make mrproper
           find . -type f -name "*.sh" -exec chmod +x {} +
+          find scripts/ -type f -exec chmod +x {} +
           
-          # 2. Setup Environment
+          # 2. Setup Strict Environment
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
-          export CC=clang
           
-          # 3. Code Fixes
-          # Ensure KSU is in drivers and has a Makefile
+          # 3. KSU Setup
           if [ -d "Kernel-SU-Next-Legacy" ]; then mv Kernel-SU-Next-Legacy drivers/kernelsu; fi
           cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
-          
-          # Add KSU to the drivers Makefile if not there
           if ! grep -q "kernelsu" drivers/Makefile; then
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
 
-          # 4. Configuration (Building in ROOT now)
-          make ARCH=arm64 HOSTCC=gcc vendor/gta9pwifi_eur_open_defconfig
+          # 4. Configuration
+          # We tell the system to use GCC for the config tools
+          make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
           
+          ./scripts/config --disable SECURITY_DEFEX
+          ./scripts/config --disable SEC_RESTRICT_FORK
           ./scripts/config --enable KSU
           ./scripts/config --enable KSU_NEXT
           ./scripts/config --enable KSU_NEXT_MANUAL_HOOK
           
-          make ARCH=arm64 HOSTCC=gcc olddefconfig
+          make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
           # 5. The Build Command
-          # Note: No O=out here. The Image will be in arch/arm64/boot/Image
-          make ARCH=arm64 CC=clang HOSTCC=gcc CLANG_TRIPLE=aarch64-linux-gnu- -j$(nproc --all) \
+          # CC_FOR_BUILD=gcc ensures scripts/mod/empty.o is built correctly on the runner
+          make ARCH=arm64 \
+          CC=clang \
+          HOSTCC=gcc \
+          CC_FOR_BUILD=gcc \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          -j1 \
           KCFLAGS="-Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration -Wno-int-conversion"
 
       - name: Upload Kernel Image
