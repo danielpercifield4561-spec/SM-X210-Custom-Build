@@ -24,16 +24,17 @@ jobs:
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
           
-          # ---> THE MASTER INCLUDE FIX <---
-          # We tell the KSU Makefile to always search its own root folder, plus the SELinux folders
-          echo "ccflags-y += -I\$(srctree)/drivers/kernelsu -I\$(srctree)/security/selinux -I\$(srctree)/security/selinux/include" >> drivers/kernelsu/Makefile
+          # ---> THE NUCLEAR HEADER FIX <---
+          # 1. Inject paths into BOTH Kbuild and Makefile so it cannot be ignored.
+          echo "ccflags-y += -Idrivers/kernelsu -Idrivers/kernelsu/selinux -Isecurity/selinux -Isecurity/selinux/include" >> drivers/kernelsu/Kbuild
+          echo "ccflags-y += -Idrivers/kernelsu -Idrivers/kernelsu/selinux -Isecurity/selinux -Isecurity/selinux/include" >> drivers/kernelsu/Makefile
           
-          # ---> THE INPUT.C FIX <---
-          # We inject the drivers path directly into the Input Makefile so it can find KSU
-          echo "ccflags-y += -I\$(srctree)/drivers" >> drivers/input/Makefile
+          # 2. Inject drivers path for input.c
+          echo "ccflags-y += -Idrivers" >> drivers/input/Kbuild || true
+          echo "ccflags-y += -Idrivers" >> drivers/input/Makefile || true
           
-          # (We no longer need the allowlist.h symlink because the ccflags-y handles it!)
-
+          # 3. Brute Force: Copy all KernelSU headers directly into the folder where ksu.c is crying about them!
+          cp drivers/kernelsu/*.h drivers/kernelsu/kernel/ || true
       - name: 🩹 Apply Deep Source Code Fixes
         run: |
           # 1. ARM64 Stack Pointer & KGDB Fixes
@@ -66,7 +67,8 @@ jobs:
 
       - name: 🔨 Compile Kernel (The Big Hammer)
         run: |
-          # Back to the single, fast build command!
+          # We use relative paths (-Idrivers) instead of absolute paths in KCFLAGS
+          # This acts as the final safety net for the entire build.
           make ARCH=arm64 \
           CC="clang --target=aarch64-linux-gnu" \
           REAL_CC="clang --target=aarch64-linux-gnu" \
@@ -76,7 +78,7 @@ jobs:
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+          KCFLAGS="-Idrivers -Idrivers/kernelsu -Isecurity/selinux -Isecurity/selinux/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
 
 
       - name: 📦 Package Output for Flashing
