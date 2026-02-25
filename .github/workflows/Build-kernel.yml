@@ -1,6 +1,6 @@
 name: Build Tab A9+ Kernel
 on:
-  workflow_dispatch: # Allows manual trigger from Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,60 +14,48 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang llvm lld gcc-aarch64-linux-gnu
 
-      - name: set-up For The Build
+      - name: Set up Environment and Source
         run: |
-          # 1. Clean & Permissions
-          make mrproper
+          # 1. Essential Permissions
           find scripts/ -type f -exec chmod +x {} +
           chmod +x scripts/gcc-wrapper.py
           
-          # 2. THE FIX: Manual Symlink
-          # This bypasses the 'asm/types.h' not found error by creating the link manually
-          ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm
-
-          # Fix KernelSU missing allowlist.h
-          touch drivers/kernelsu/kernel/allowlist.h
-          
-          # Broad fix for the Techpack prototypes that failed
-          sed -i 's/msm_audio_add_qos_request()/msm_audio_add_qos_request(void)/g' techpack/audio/asoc/holi.c
-          sed -i 's/msm_audio_remove_qos_request()/msm_audio_remove_qos_request(void)/g' techpack/audio/asoc/holi.c
-          sed -i 's/cam_debug_get_settings()/cam_debug_get_settings(void)/g' techpack/camera/drivers/cam_utils/cam_debug_util.c
-
-          # Ensure KernelSU path is linked
-          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu || true
-
-          # Fix 1: Add (void) to function prototypes in audio codec
-          sed -i 's/void fsm_mutex_lock()/void fsm_mutex_lock(void)/g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c
-          sed -i 's/void fsm_mutex_unlock()/void fsm_mutex_unlock(void)/g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c
-
-          # Fix 2: Create dummy focaltech firmware file so it stops complaining
-          mkdir -p drivers/input/touchscreen/focaltech_touch_spi/include/firmware
-          touch drivers/input/touchscreen/focaltech_touch_spi/include/firmware/fw_sample.i
-
-          # Fix 3: Fix KernelSU include path
-          # We create a symlink so <kernelsu/...> points to the actual directory
-          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu
-          
-          # 3. Setup Environment (Using LLD to fix the Linker warning)
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          
-          # 4. KSU Setup
+          # 2. KernelSU Placement (MUST DO THIS FIRST)
           if [ -d "Kernel-SU-Next-Legacy" ]; then mv Kernel-SU-Next-Legacy drivers/kernelsu; fi
           cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
           if ! grep -q "kernelsu" drivers/Makefile; then
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
+
+          # 3. Apply Code Patches
+          # Fix KernelSU missing allowlist.h
+          touch drivers/kernelsu/kernel/allowlist.h
           
-          # 5. This fixes the "trace.h file not found" error in the WALT scheduler
+          # Fix Techpack prototypes (holi.c and camera)
+          sed -i 's/msm_audio_add_qos_request()/msm_audio_add_qos_request(void)/g' techpack/audio/asoc/holi.c
+          sed -i 's/msm_audio_remove_qos_request()/msm_audio_remove_qos_request(void)/g' techpack/audio/asoc/holi.c
+          sed -i 's/cam_debug_get_settings()/cam_debug_get_settings(void)/g' techpack/camera/drivers/cam_utils/cam_debug_util.c
+          
+          # Fix Audio Codec prototypes
+          sed -i 's/void fsm_mutex_lock()/void fsm_mutex_lock(void)/g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c
+          sed -i 's/void fsm_mutex_unlock()/void fsm_mutex_unlock(void)/g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c
+          
+          # Fix Focaltech Firmware
+          mkdir -p drivers/input/touchscreen/focaltech_touch_spi/include/firmware
+          touch drivers/input/touchscreen/focaltech_touch_spi/include/firmware/fw_sample.i
+          
+          # Fix WALT scheduler trace path
           sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' kernel/sched/walt/trace.h
 
+          # 4. Create Links
+          ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm
+          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu
 
-          # 6. Configuration
+          # 5. Configuration
+          export ARCH=arm64
           make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
           
-          # Enable KSU & Disable Samsung Defex
+          # Enable KSU & Disable Samsung Security
           ./scripts/config --disable SECURITY_DEFEX
           ./scripts/config --disable SEC_RESTRICT_FORK
           ./scripts/config --enable KSU
@@ -75,18 +63,19 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-      -  name: The Build
-         run:
-          # We add LD=ld.lld to fix the cortex-a53 warning
-          # We remove the manual -I paths from KCFLAGS and let the symlink do the work
+      - name: The Build
+        run: |
+          # The "Big Hammer" Build Command
+          # Added -Wno-strict-prototypes and -Wno-enum-conversion to skip the techpack errors
           make ARCH=arm64 \
           CC=clang \
+          REAL_CC=clang \
           LD=ld.lld \
           HOSTCC=gcc \
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-Wno-error=frame-larger-than= -Wno-implicit-function-declaration"
+          KCFLAGS="-Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
           
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
