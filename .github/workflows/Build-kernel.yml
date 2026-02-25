@@ -68,36 +68,23 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-      - name: 🔨 Generate SELinux Headers (The Bypass Protocol)
+      - name: 🔨 Resolve SELinux Headers (The Clean Bypass)
         run: |
-          # 1. Generate the core scripts needed for the kernel
+          # 1. Prepare core headers
           make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
           
-          echo "Bypassing Kbuild to manually generate flask.h and av_permissions.h..."
+          echo "Bypassing broken Kbuild and host compilers entirely."
           mkdir -p security/selinux/include
           
-          # 2. Locate Samsung's generator tools and raw header maps
-          GEN_C=$(find scripts/selinux -name "genheaders.c" -o -name "mdp.c" | head -n 1)
-          CLASSMAP=$(find security/selinux -name "classmap.h" | head -n 1)
-          INITIAL_SID=$(find security/selinux -name "initial_sid_to_string.h" | head -n 1)
+          # 2. Fetch standard mainline Android/Linux SELinux headers (v5.15)
+          wget -q https://raw.githubusercontent.com/torvalds/linux/v5.15/security/selinux/include/flask.h -O security/selinux/include/flask.h
+          wget -q https://raw.githubusercontent.com/torvalds/linux/v5.15/security/selinux/include/av_permissions.h -O security/selinux/include/av_permissions.h
           
-          # 3. Compile and Run the Generator Manually
-          if [ -n "$GEN_C" ] && [ -n "$CLASSMAP" ] && [ -n "$INITIAL_SID" ]; then
-              echo "Compiling $GEN_C..."
-              gcc -Isecurity/selinux/include -Iinclude "$GEN_C" -o selinux_gen
-              echo "Running generator..."
-              ./selinux_gen "$CLASSMAP" "$INITIAL_SID" security/selinux/include/flask.h security/selinux/include/av_permissions.h
-              echo "Generation complete!"
-          else
-              echo "Generators not found. Fetching standard mainline headers as ultimate failsafe..."
-              wget -q https://raw.githubusercontent.com/torvalds/linux/v5.4/security/selinux/include/flask.h -O security/selinux/include/flask.h
-              wget -q https://raw.githubusercontent.com/torvalds/linux/v5.4/security/selinux/include/av_permissions.h -O security/selinux/include/av_permissions.h
-          fi
-          
-          # 4. Copy the generated files directly into KSU so it physically cannot miss them
+          # 3. Copy them literally everywhere KernelSU might look
           cp security/selinux/include/flask.h drivers/kernelsu/ || true
           cp security/selinux/include/av_permissions.h drivers/kernelsu/ || true
-
+          cp security/selinux/include/flask.h drivers/kernelsu/kernel/ || true
+          cp security/selinux/include/av_permissions.h drivers/kernelsu/kernel/ || true
 
       - name: 🔨 Compile Kernel (The Main Build)
         run: |
