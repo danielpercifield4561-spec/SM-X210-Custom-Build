@@ -60,7 +60,7 @@ jobs:
 
       - name: 🔨 Compile Kernel (The Big Hammer)
         run: |
-          # 1. Pre-compile the security folder to generate flask.h (Fixes the Race Condition)
+          # 1. Prepare the kernel environment and auto-generated headers
           make ARCH=arm64 \
           CC="clang --target=aarch64-linux-gnu" \
           REAL_CC="clang --target=aarch64-linux-gnu" \
@@ -68,9 +68,22 @@ jobs:
           LD=ld.lld \
           HOSTCC=gcc \
           CC_FOR_BUILD=gcc \
-          -j$(nproc --all) security/
+          -j$(nproc --all) prepare
           
-          # 2. The Main Build (Added SELinux include path to KCFLAGS)
+          # 2. Pre-compile SELinux ONLY to generate flask.h (Fixes the Race Condition)
+          make ARCH=arm64 \
+          CC="clang --target=aarch64-linux-gnu" \
+          REAL_CC="clang --target=aarch64-linux-gnu" \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          LD=ld.lld \
+          HOSTCC=gcc \
+          CC_FOR_BUILD=gcc \
+          -j$(nproc --all) security/selinux/
+          
+          # 3. Failsafe: If flask.h generated in the parent folder, link it to /include
+          ln -sf $(pwd)/security/selinux/flask.h $(pwd)/security/selinux/include/flask.h || true
+          
+          # 4. The Main Build (Added SELinux paths to KCFLAGS)
           make ARCH=arm64 \
           CC="clang --target=aarch64-linux-gnu" \
           REAL_CC="clang --target=aarch64-linux-gnu" \
@@ -80,7 +93,8 @@ jobs:
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-I$(pwd)/drivers -I$(pwd)/drivers/kernelsu -I$(pwd)/security/selinux/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+          KCFLAGS="-I$(pwd)/drivers -I$(pwd)/drivers/kernelsu -I$(pwd)/security/selinux -I$(pwd)/security/selinux/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+
 
 
       - name: 📦 Package Output for Flashing
