@@ -489,12 +489,11 @@ USERINCLUDE    := \
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
 LINUXINCLUDE    := \
-		-I$(srctree)/arch/$(SRCARCH)/include \
-		-I$(objtree)/arch/$(SRCARCH)/include/generated \
-		$(if $(building_out_of_srctree),-I$(srctree)/include) \
+		-I$(srctree)/arch/$(hdr-arch)/include \
+		-I$(objtree)/arch/$(hdr-arch)/include/generated \
+		-I$(srctree)/include \
 		-I$(objtree)/include \
 		$(USERINCLUDE)
-LINUXINCLUDE    := -I$(srctree)/drivers/kernelsu
 
 KBUILD_AFLAGS   := -D__ASSEMBLY__ -fno-PIE
 KBUILD_CFLAGS   := -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs \
