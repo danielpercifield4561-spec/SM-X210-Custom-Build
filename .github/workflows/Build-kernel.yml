@@ -43,21 +43,6 @@ jobs:
           # Brute force copy KSU headers
           cp drivers/kernelsu/*.h drivers/kernelsu/kernel/ || true
 
-      - name: 🔨 Generate SELinux Headers (The Targeted Strike)
-        run: |
-          # 1. Generate the core scripts needed to run the header generator
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) scripts
-          
-          # 2. FORCE GENERATE SPECIFIC HEADERS
-          # We are commanding the kernel to build ONLY these two files, bypassing the rest of the folder!
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/flask.h
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/av_permissions.h
-          
-          # 3. Physically move them so objsec.h can't miss them
-          cp security/selinux/flask.h security/selinux/include/ || true
-          cp security/selinux/av_permissions.h security/selinux/include/ || true
-
       - name: 🩹 Apply Deep Source Code Fixes
         run: |
           sed -i 's|register unsigned long current_stack_pointer asm ("sp");|/* Removed global sp */ #define current_stack_pointer ({ unsigned long sp; asm("mov %0, sp" : "=r"(sp)); sp; })|g' arch/arm64/include/asm/stack_pointer.h || true
@@ -82,6 +67,21 @@ jobs:
           ./scripts/config --file .config --enable KSU_NEXT_MANUAL_HOOK
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
+
+      - name: 🔨 Generate SELinux Headers (The Targeted Strike)
+        run: |
+          # 1. Generate the core scripts needed to run the header generator
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) scripts
+          
+          # 2. FORCE GENERATE SPECIFIC HEADERS
+          # We are commanding the kernel to build ONLY these two files, bypassing the rest of the folder!
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/flask.h
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/av_permissions.h
+          
+          # 3. Physically move them so objsec.h can't miss them
+          cp security/selinux/flask.h security/selinux/include/ || true
+          cp security/selinux/av_permissions.h security/selinux/include/ || true
 
       - name: 🔨 Compile Kernel (The Main Build)
         run: |
