@@ -28,6 +28,10 @@ jobs:
           # We inject the SELinux paths directly into the KernelSU Makefile
           echo "ccflags-y += -I\$(srctree)/security/selinux -I\$(srctree)/security/selinux/include" >> drivers/kernelsu/Makefile
           
+          # ---> THE INPUT.C FIX <---
+          # We inject the drivers path directly into the Input Makefile so it can find KSU
+          echo "ccflags-y += -I\$(srctree)/drivers" >> drivers/input/Makefile
+          
           mkdir -p include/kernelsu
           ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu || true
           
