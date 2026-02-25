@@ -76,10 +76,14 @@ jobs:
           
           # 2. FORCE GENERATE SPECIFIC HEADERS
           # We are commanding the kernel to build ONLY these two files, bypassing the rest of the folder!
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/flask.h
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/av_permissions.h
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/flask.h || true
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/av_permissions.h || true
+          
+          # Fallback: Just build the SELinux folder without multi-threading to avoid internal race conditions
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/ || true
           
           # 3. Physically move them so objsec.h can't miss them
+          mkdir -p security/selinux/include/
           cp security/selinux/flask.h security/selinux/include/ || true
           cp security/selinux/av_permissions.h security/selinux/include/ || true
 
@@ -95,7 +99,7 @@ jobs:
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
           KCFLAGS="-I${GITHUB_WORKSPACE}/drivers/kernelsu -I${GITHUB_WORKSPACE}/security/selinux -I${GITHUB_WORKSPACE}/security/selinux/include -I${GITHUB_WORKSPACE}/drivers -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
-          
+
       - name: 📦 Package Output for Flashing
         run: |
           mkdir -p Final_Kernel
@@ -108,4 +112,3 @@ jobs:
         with:
           name: TabA9Plus-KSU-Kernel
           path: Final_Kernel/TabA9Plus-KSU-Kernel.tar
-
