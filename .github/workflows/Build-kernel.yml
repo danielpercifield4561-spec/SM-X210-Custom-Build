@@ -36,8 +36,12 @@ jobs:
           if ! grep -q "kernelsu" drivers/Makefile; then
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
+          
+          # 5. This fixes the "trace.h file not found" error in the WALT scheduler
+          sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' kernel/sched/walt/trace.h
 
-          # 5. Configuration
+
+          # 6. Configuration
           make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
           
           # Enable KSU & Disable Samsung Defex
@@ -48,7 +52,7 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-          # 6. The Build
+          # 7. The Build
           # We add LD=ld.lld to fix the cortex-a53 warning
           # We remove the manual -I paths from KCFLAGS and let the symlink do the work
           make ARCH=arm64 \
