@@ -16,33 +16,49 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # 1. CLEAN & PERMISSIONS
+          # 1. Clean & Permissions
+          make mrproper
           find scripts/ -type f -exec chmod +x {} +
           chmod +x scripts/gcc-wrapper.py
           
-          # 2. CODE FIX: Force atomic64_t definition (The "Samsung Clang Fix")
-          # This ensures that types.h is fully parsed before the atomic operations
-          sed -i '1i #include <linux/types.h>' arch/arm64/include/asm/atomic_ll_sc.h
-
-          # 3. KSU SETUP
+          # 2. THE FIX: Manual Symlink
+          # This bypasses the 'asm/types.h' not found error by creating the link manually
+          ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm
+          
+          # 3. Setup Environment (Using LLD to fix the Linker warning)
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          
+          # 4. KSU Setup
           if [ -d "Kernel-SU-Next-Legacy" ]; then mv Kernel-SU-Next-Legacy drivers/kernelsu; fi
           cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
+          if ! grep -q "kernelsu" drivers/Makefile; then
+            echo 'obj-y += kernelsu/' >> drivers/Makefile
+          fi
 
-          # 4. CONFIGURATION
+          # 5. Configuration
           make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
           
-          # Fix the "Restart config" hang by using olddefconfig
+          # Enable KSU & Disable Samsung Defex
+          ./scripts/config --disable SECURITY_DEFEX
+          ./scripts/config --disable SEC_RESTRICT_FORK
+          ./scripts/config --enable KSU
+          ./scripts/config --enable KSU_NEXT
+          
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-          # 5. THE BUILD
-          # Added -include linux/types.h to force the definition across the whole build
+          # 6. The Build
+          # We add LD=ld.lld to fix the cortex-a53 warning
+          # We remove the manual -I paths from KCFLAGS and let the symlink do the work
           make ARCH=arm64 \
           CC=clang \
+          LD=ld.lld \
           HOSTCC=gcc \
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-include linux/types.h -I$(pwd)/include -I$(pwd)/arch/arm64/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration"
+          KCFLAGS="-Wno-error=frame-larger-than= -Wno-implicit-function-declaration"
           
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
