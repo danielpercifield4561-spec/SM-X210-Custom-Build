@@ -24,17 +24,21 @@ jobs:
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
           
-          # ---> THE NUCLEAR HEADER FIX <---
-          # 1. Inject paths into BOTH Kbuild and Makefile so it cannot be ignored.
-          echo "ccflags-y += -Idrivers/kernelsu -Idrivers/kernelsu/selinux -Isecurity/selinux -Isecurity/selinux/include" >> drivers/kernelsu/Kbuild
-          echo "ccflags-y += -Idrivers/kernelsu -Idrivers/kernelsu/selinux -Isecurity/selinux -Isecurity/selinux/include" >> drivers/kernelsu/Makefile
+          # ---> THE CRITICAL PATH FIX <---
+          # We MUST use \$(srctree)/ so Kbuild knows to look at the kernel root, not inside the drivers folder!
+          echo "ccflags-y += -I\$(srctree)/security/selinux -I\$(srctree)/security/selinux/include" >> drivers/kernelsu/Kbuild
+          echo "ccflags-y += -I\$(srctree)/security/selinux -I\$(srctree)/security/selinux/include" >> drivers/kernelsu/Makefile
           
-          # 2. Inject drivers path for input.c
-          echo "ccflags-y += -Idrivers" >> drivers/input/Kbuild || true
-          echo "ccflags-y += -Idrivers" >> drivers/input/Makefile || true
+          # Fix for input.c
+          echo "ccflags-y += -I\$(srctree)/drivers" >> drivers/input/Makefile || true
+          echo "ccflags-y += -I\$(srctree)/drivers" >> drivers/input/Kbuild || true
           
-          # 3. Brute Force: Copy all KernelSU headers directly into the folder where ksu.c is crying about them!
-          cp drivers/kernelsu/*.h drivers/kernelsu/kernel/ || true
+          mkdir -p include/kernelsu
+          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu || true
+          
+          # Internal Link for allowlist.h
+          ln -sf $(pwd)/drivers/kernelsu/allowlist.h $(pwd)/drivers/kernelsu/kernel/allowlist.h || true
+
       - name: 🩹 Apply Deep Source Code Fixes
         run: |
           # 1. ARM64 Stack Pointer & KGDB Fixes
@@ -97,7 +101,7 @@ jobs:
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-Idrivers -Idrivers/kernelsu -Isecurity/selinux -Isecurity/selinux/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+          KCFLAGS="-I$(pwd)/drivers -I$(pwd)/security/selinux -I$(pwd)/security/selinux/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
 
 
 
