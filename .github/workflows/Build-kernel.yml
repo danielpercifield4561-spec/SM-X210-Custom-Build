@@ -57,8 +57,8 @@ jobs:
 
           # Fix 'sp' unsuitable for global register variables
           # We change 'register' to 'static inline' to avoid global register reservation
-          sed -i 's/register unsigned long current_stack_pointer asm ("sp");/static inline unsigned long get_stack_pointer(void) { unsigned long sp; asm volatile("mov %0, sp" : "=r"(sp)); return sp; }/g' arch/arm64/include/asm/stack_pointer.h
-          
+          sed -i 's/register unsigned long current_stack_pointer asm ("sp");/\/* Removed global register sp *\/ #define current_stack_pointer ({ unsigned long sp; asm("mov %0, sp" : "=r"(sp)); sp; })/g' arch/arm64/include/asm/stack_pointer.h
+         
           # Fix "brk 1025 out of range"
           # The "I" constraint is too strict for some Clang versions; "n" or "i" is safer
           sed -i 's/"brk %0" : : "I"/"brk %0" : : "n"/g' arch/arm64/include/asm/kgdb.h
