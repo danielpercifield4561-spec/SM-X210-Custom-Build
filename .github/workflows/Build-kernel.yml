@@ -1,10 +1,10 @@
 name: Build Tab A9+ Custom Kernel (KSU)
 on:
-  workflow_dispatch: # Allows manual triggering
+  workflow_dispatch:
 
 jobs:
   build-kernel:
-    runs-on: ubuntu-22.04 # We specify 22.04 for stable Clang/GCC compatibility
+    runs-on: ubuntu-22.04
 
     steps:
       - name: 📥 Checkout Source Code
@@ -13,31 +13,89 @@ jobs:
       - name: 🛠️ Install Toolchain & Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
-          clang llvm lld gcc-aarch64-linux-gnu tar zip
+          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang llvm lld gcc-aarch64-linux-gnu tar zip
 
-      - name: 📁 KernelSU Setup & Permissions
+      - name: 📁 Setup & Permissions
         run: |
-          # 1. Aggressively fix script permissions to avoid "Permission Denied"
-          find scripts/ -type f -exec chmod +x {} +
+          # 1. Essential Permissions
+          find scripts/ -type f -exec chmod +x {} + || true
           chmod +x scripts/gcc-wrapper.py || true
           
-          # 2. Integrate KernelSU folder into drivers
-          if [ -d "Kernel-SU-Next-Legacy" ]; then mv Kernel-SU-Next-Legacy drivers/kernelsu; fi
-          cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
-          
-          # 3. Add KSU to the kernel's main compile list
+          # 2. Add KSU to the kernel's main compile list
           if ! grep -q "kernelsu" drivers/Makefile; then
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
           
-          # 4. Create required KSU dummy file to prevent "File Not Found"
-          touch drivers/kernelsu/kernel/allowlist.h
-          
-          # 5. Link KSU headers globally so input.c can find them
+          # 3. Global Link: Allows drivers/input/input.c to find <kernelsu/kernel/ksu.h>
           mkdir -p include/kernelsu
-          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu
+          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu || true
+          
+          # 4. Internal Link: Allows ksu.c to find the real allowlist.h sitting one folder up
+          ln -sf $(pwd)/drivers/kernelsu/allowlist.h $(pwd)/drivers/kernelsu/kernel/allowlist.h || true
 
       - name: 🩹 Apply Deep Source Code Fixes
         run: |
-          # 1. ARM64 Stack Pointer & KGDB Fixes
+          # We use '|' instead of '/' in sed to prevent silent syntax crashes
+          
+          # 1. ARM64 Stack Pointer & KGDB Fixes (Crucial for modern Clang)
+          sed -i 's|register unsigned long current_stack_pointer asm ("sp");|/* Removed global sp */ #define current_stack_pointer ({ unsigned long sp; asm("mov %0, sp" : "=r"(sp)); sp; })|g' arch/arm64/include/asm/stack_pointer.h || true
+          sed -i 's|"brk %0" : : "I"|"brk %0" : : "n"|g' arch/arm64/include/asm/kgdb.h || true
+          
+          # 2. Link ARM64 headers globally
+          ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm || true
+          
+          # 3. WALT Scheduler Trace Path Fix
+          sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' kernel/sched/walt/trace.h || true
+          
+          # 4. Focaltech Dummy Firmware Fix
+          mkdir -p drivers/input/touchscreen/focaltech_touch_spi/include/firmware
+          touch drivers/input/touchscreen/focaltech_touch_spi/include/firmware/fw_sample.i || true
+          
+          # 5. Techpack Audio & Camera Prototype Fixes
+          sed -i 's|void fsm_mutex_lock()|void fsm_mutex_lock(void)|g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c || true
+          sed -i 's|void fsm_mutex_unlock()|void fsm_mutex_unlock(void)|g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c || true
+          sed -i 's|msm_audio_add_qos_request()|msm_audio_add_qos_request(void)|g' techpack/audio/asoc/holi.c || true
+          sed -i 's|msm_audio_remove_qos_request()|msm_audio_remove_qos_request(void)|g' techpack/audio/asoc/holi.c || true
+          sed -i 's|cam_debug_get_settings()|cam_debug_get_settings(void)|g' techpack/camera/drivers/cam_utils/cam_debug_util.c || true
+
+      - name: ⚙️ Generate Kernel Configuration
+        run: |
+          export ARCH=arm64
+          make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
+          
+          # Apply Security & Root configs
+          ./scripts/config --file .config --disable SECURITY_DEFEX
+          ./scripts/config --file .config --disable SEC_RESTRICT_FORK
+          ./scripts/config --file .config --enable KSU
+          ./scripts/config --file .config --enable KSU_NEXT
+          ./scripts/config --file .config --enable KSU_NEXT_MANUAL_HOOK
+          
+          make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
+
+      - name: 🔨 Compile Kernel (The Big Hammer)
+        run: |
+          # CC Target override fixes the VDSO assembler error
+          # We also add -I$(pwd)/drivers/kernelsu to ensure all KSU files find each other
+          make ARCH=arm64 \
+          CC="clang --target=aarch64-linux-gnu" \
+          REAL_CC="clang --target=aarch64-linux-gnu" \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          LD=ld.lld \
+          HOSTCC=gcc \
+          CC_FOR_BUILD=gcc \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          -j$(nproc --all) \
+          KCFLAGS="-I$(pwd)/drivers/kernelsu -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+
+      - name: 📦 Package Output for Flashing
+        run: |
+          mkdir -p Final_Kernel
+          cp arch/arm64/boot/Image Final_Kernel/ || true
+          cd Final_Kernel
+          tar -cvf TabA9Plus-KSU-Kernel.tar Image || true
+          
+      - name: 📤 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TabA9Plus-KSU-Kernel
+          path: Final_Kernel/TabA9Plus-KSU-Kernel.tar
