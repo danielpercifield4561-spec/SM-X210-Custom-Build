@@ -14,7 +14,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang llvm lld gcc-aarch64-linux-gnu
 
-      - name: Build Kernel
+      - name: set-up For The Build
         run: |
           # 1. Clean & Permissions
           make mrproper
@@ -24,6 +24,17 @@ jobs:
           # 2. THE FIX: Manual Symlink
           # This bypasses the 'asm/types.h' not found error by creating the link manually
           ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm
+
+          # Fix KernelSU missing allowlist.h
+          touch drivers/kernelsu/kernel/allowlist.h
+          
+          # Broad fix for the Techpack prototypes that failed
+          sed -i 's/msm_audio_add_qos_request()/msm_audio_add_qos_request(void)/g' techpack/audio/asoc/holi.c
+          sed -i 's/msm_audio_remove_qos_request()/msm_audio_remove_qos_request(void)/g' techpack/audio/asoc/holi.c
+          sed -i 's/cam_debug_get_settings()/cam_debug_get_settings(void)/g' techpack/camera/drivers/cam_utils/cam_debug_util.c
+
+          # Ensure KernelSU path is linked
+          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu || true
 
           # Fix 1: Add (void) to function prototypes in audio codec
           sed -i 's/void fsm_mutex_lock()/void fsm_mutex_lock(void)/g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c
@@ -64,7 +75,8 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-          # 7. The Build
+      -  name: The Build
+         run:
           # We add LD=ld.lld to fix the cortex-a53 warning
           # We remove the manual -I paths from KCFLAGS and let the symlink do the work
           make ARCH=arm64 \
