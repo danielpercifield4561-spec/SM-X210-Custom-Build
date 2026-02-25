@@ -16,44 +16,34 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # 1. FORCE SCRIPT PERMISSIONS
-          # We target the specific wrapper causing the 'Permission denied'
-          chmod +x scripts/gcc-wrapper.py
+          # 1. CLEAN & PERMISSIONS
           find scripts/ -type f -exec chmod +x {} +
-          find . -type f -name "*.sh" -exec chmod +x {} +
+          chmod +x scripts/gcc-wrapper.py
           
-          # 2. SETUP ENVIRONMENT
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          
-          # 3. KSU FOLDER & MAKEFILE
+          # 2. CODE FIX: Force atomic64_t definition (The "Samsung Clang Fix")
+          # This ensures that types.h is fully parsed before the atomic operations
+          sed -i '1i #include <linux/types.h>' arch/arm64/include/asm/atomic_ll_sc.h
+
+          # 3. KSU SETUP
           if [ -d "Kernel-SU-Next-Legacy" ]; then mv Kernel-SU-Next-Legacy drivers/kernelsu; fi
           cp drivers/kernelsu/Kbuild drivers/kernelsu/Makefile || true
-          
-          # 4. CONFIGURATION (Strict GCC for tools)
+
+          # 4. CONFIGURATION
           make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
           
-          ./scripts/config --disable SECURITY_DEFEX
-          ./scripts/config --disable SEC_RESTRICT_FORK
-          ./scripts/config --enable KSU
-          ./scripts/config --enable KSU_NEXT
-          ./scripts/config --enable KSU_NEXT_MANUAL_HOOK
-          
+          # Fix the "Restart config" hang by using olddefconfig
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
-          
-          # The Final Build Command
-          # We add the specific ASM include paths to KCFLAGS
+
+          # 5. THE BUILD
+          # Added -include linux/types.h to force the definition across the whole build
           make ARCH=arm64 \
           CC=clang \
           HOSTCC=gcc \
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
-          -j1 \
-          KCFLAGS="-I$(pwd)/include -I$(pwd)/arch/arm64/include -I$(pwd)/arch/arm64/include/generated -I$(pwd)/include/uapi -I$(pwd)/arch/arm64/include/uapi -I$(pwd)/arch/arm64/include/generated/uapi -Wno-error=frame-larger-than= -Wno-strict-prototypes -Wno-implicit-function-declaration"
-
-
-
+          -j$(nproc --all) \
+          KCFLAGS="-include linux/types.h -I$(pwd)/include -I$(pwd)/arch/arm64/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration"
+          
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
         with:
