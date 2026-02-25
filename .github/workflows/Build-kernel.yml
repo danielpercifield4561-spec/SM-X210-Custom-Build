@@ -58,7 +58,7 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-            - name: 🔨 Compile Kernel (The Big Hammer)
+      - name: 🔨 Compile Kernel (The Big Hammer)
         run: |
           # 1. Pre-compile the security folder to generate flask.h (Fixes the Race Condition)
           make ARCH=arm64 \
