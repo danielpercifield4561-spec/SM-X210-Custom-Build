@@ -25,7 +25,6 @@ jobs:
           fi
           
           # ---> THE MASTER PATH FIX <---
-          # We tell Kbuild to look at the SELinux folders AND the KernelSU root folder
           echo "ccflags-y += -I\$(srctree)/drivers/kernelsu -I\$(srctree)/security/selinux -I\$(srctree)/security/selinux/include" >> drivers/kernelsu/Kbuild
           echo "ccflags-y += -I\$(srctree)/drivers/kernelsu -I\$(srctree)/security/selinux -I\$(srctree)/security/selinux/include" >> drivers/kernelsu/Makefile
           
@@ -33,26 +32,21 @@ jobs:
           echo "ccflags-y += -I\$(srctree)/drivers" >> drivers/input/Makefile || true
           echo "ccflags-y += -I\$(srctree)/drivers" >> drivers/input/Kbuild || true
           
+          # Link for input.c
           mkdir -p include/kernelsu
           ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu || true
           
-          # ---> THE BRUTE FORCE HEADER FIX <---
-          # We physically copy all headers into the kernel/ subfolder so ksu.c cannot possibly miss them
+          # ---> THE BRUTE FORCE HEADER FIX (Fixes app_profile.h) <---
           cp drivers/kernelsu/*.h drivers/kernelsu/kernel/ || true
 
       - name: 🩹 Apply Deep Source Code Fixes
         run: |
-          # 1. ARM64 Stack Pointer & KGDB Fixes
           sed -i 's|register unsigned long current_stack_pointer asm ("sp");|/* Removed global sp */ #define current_stack_pointer ({ unsigned long sp; asm("mov %0, sp" : "=r"(sp)); sp; })|g' arch/arm64/include/asm/stack_pointer.h || true
           sed -i 's|"brk %0" : : "I"|"brk %0" : : "n"|g' arch/arm64/include/asm/kgdb.h || true
-          
-          # 2. Link ARM64 headers globally
           ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm || true
-          
-          # 3. WALT Scheduler Trace Path Fix
           sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' kernel/sched/walt/trace.h || true
           
-          # 4. Focaltech Dummy Firmware Fix
+          # Focaltech Dummy Firmware Fix
           mkdir -p drivers/input/touchscreen/focaltech_touch_spi/include/firmware
           touch drivers/input/touchscreen/focaltech_touch_spi/include/firmware/fw_sample.i || true
 
@@ -70,29 +64,15 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-      - name: 🔨 Compile Kernel (The Big Hammer)
+      - name: 🔨 Compile Kernel (The Sequenced Hammer)
         run: |
-          # 1. PREPARE: Generate all core kernel headers first
-          make ARCH=arm64 \
-          CC="clang --target=aarch64-linux-gnu" \
-          REAL_CC="clang --target=aarch64-linux-gnu" \
-          CROSS_COMPILE=aarch64-linux-gnu- \
-          LD=ld.lld \
-          HOSTCC=gcc \
-          CC_FOR_BUILD=gcc \
-          -j$(nproc --all) prepare
+          # 1. PREPARE: Generate core headers
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" REAL_CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
           
-          # 2. SELINUX ONLY: Force the generation of flask.h before KSU can compile
-          make ARCH=arm64 \
-          CC="clang --target=aarch64-linux-gnu" \
-          REAL_CC="clang --target=aarch64-linux-gnu" \
-          CROSS_COMPILE=aarch64-linux-gnu- \
-          LD=ld.lld \
-          HOSTCC=gcc \
-          CC_FOR_BUILD=gcc \
-          -j$(nproc --all) security/selinux/
+          # 2. SELINUX ONLY: Force the generation of flask.h before KSU can compile!
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" REAL_CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) security/
           
-          # 3. MAIN BUILD: Now that flask.h physically exists, compile the rest!
+          # 3. MAIN BUILD: Now compile everything else
           make ARCH=arm64 \
           CC="clang --target=aarch64-linux-gnu" \
           REAL_CC="clang --target=aarch64-linux-gnu" \
@@ -102,9 +82,7 @@ jobs:
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-I$(pwd)/drivers -I$(pwd)/security/selinux -I$(pwd)/security/selinux/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
-
-
+          KCFLAGS="-Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
 
       - name: 📦 Package Output for Flashing
         run: |
@@ -118,3 +96,4 @@ jobs:
         with:
           name: TabA9Plus-KSU-Kernel
           path: Final_Kernel/TabA9Plus-KSU-Kernel.tar
+
