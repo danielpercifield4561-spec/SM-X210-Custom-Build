@@ -68,23 +68,36 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-      - name: 🔨 Resolve SELinux Headers (The Clean Bypass)
+      - name: 🔨 Generate SELinux Headers (The Local Forge)
         run: |
-          # 1. Prepare core headers
           make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
           
-          echo "Bypassing broken Kbuild and fetching standard SELinux headers..."
+          echo "Bypassing Kbuild to manually generate flask.h and av_permissions.h..."
           mkdir -p security/selinux/include
           
-          # 2. THE TIME MACHINE: Fetch headers from v4.14 before they were deleted from Linux!
-          wget -q https://raw.githubusercontent.com/torvalds/linux/v4.14/security/selinux/include/flask.h -O security/selinux/include/flask.h
-          wget -q https://raw.githubusercontent.com/torvalds/linux/v4.14/security/selinux/include/av_permissions.h -O security/selinux/include/av_permissions.h
+          GEN_C=$(find scripts/selinux -name "genheaders.c" | head -n 1)
+          CLASSMAP=$(find security/selinux -name "classmap.h" | head -n 1)
+          INITIAL_SID=$(find security/selinux -name "initial_sid_to_string.h" | head -n 1)
           
-          # 3. Copy them literally everywhere KernelSU might look
+          echo "Compiling $GEN_C..."
+          # We purposefully DO NOT pass -Iinclude here. This forces gcc to use Ubuntu's clean host headers and prevents the massive header clash!
+          if ! gcc -Isecurity/selinux -Isecurity/selinux/include "$GEN_C" -o selinux_gen; then
+            echo "Standard host compilation failed. Stripping raw kernel includes from classmap.h and forcing compile..."
+            sed -i 's/#include <linux\/socket.h>//g' "$CLASSMAP" || true
+            sed -i 's/#include <linux\/capability.h>//g' "$CLASSMAP" || true
+            sed -i '1i #define PF_MAX 45' "$CLASSMAP" || true
+            gcc -Isecurity/selinux -Isecurity/selinux/include "$GEN_C" -o selinux_gen
+          fi
+          
+          echo "Running SELinux generator..."
+          ./selinux_gen "$CLASSMAP" "$INITIAL_SID" security/selinux/include/flask.h security/selinux/include/av_permissions.h
+          
+          echo "Deploying generated headers to KernelSU..."
           cp security/selinux/include/flask.h drivers/kernelsu/ || true
           cp security/selinux/include/av_permissions.h drivers/kernelsu/ || true
           cp security/selinux/include/flask.h drivers/kernelsu/kernel/ || true
           cp security/selinux/include/av_permissions.h drivers/kernelsu/kernel/ || true
+
 
 
       - name: 🔨 Compile Kernel (The Main Build)
