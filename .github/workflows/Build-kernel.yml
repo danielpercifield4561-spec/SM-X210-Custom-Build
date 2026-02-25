@@ -67,8 +67,27 @@ jobs:
 
       - name: 🔨 Compile Kernel (The Big Hammer)
         run: |
-          # We use relative paths (-Idrivers) instead of absolute paths in KCFLAGS
-          # This acts as the final safety net for the entire build.
+          # 1. PREPARE: Generate all core kernel headers first
+          make ARCH=arm64 \
+          CC="clang --target=aarch64-linux-gnu" \
+          REAL_CC="clang --target=aarch64-linux-gnu" \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          LD=ld.lld \
+          HOSTCC=gcc \
+          CC_FOR_BUILD=gcc \
+          -j$(nproc --all) prepare
+          
+          # 2. SELINUX ONLY: Force the generation of flask.h before KSU can compile
+          make ARCH=arm64 \
+          CC="clang --target=aarch64-linux-gnu" \
+          REAL_CC="clang --target=aarch64-linux-gnu" \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          LD=ld.lld \
+          HOSTCC=gcc \
+          CC_FOR_BUILD=gcc \
+          -j$(nproc --all) security/selinux/
+          
+          # 3. MAIN BUILD: Now that flask.h physically exists, compile the rest!
           make ARCH=arm64 \
           CC="clang --target=aarch64-linux-gnu" \
           REAL_CC="clang --target=aarch64-linux-gnu" \
@@ -79,6 +98,7 @@ jobs:
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
           KCFLAGS="-Idrivers -Idrivers/kernelsu -Isecurity/selinux -Isecurity/selinux/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+
 
 
       - name: 📦 Package Output for Flashing
