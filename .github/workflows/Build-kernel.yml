@@ -24,6 +24,18 @@ jobs:
           # 2. THE FIX: Manual Symlink
           # This bypasses the 'asm/types.h' not found error by creating the link manually
           ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm
+
+          # Fix 1: Add (void) to function prototypes in audio codec
+          sed -i 's/void fsm_mutex_lock()/void fsm_mutex_lock(void)/g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c
+          sed -i 's/void fsm_mutex_unlock()/void fsm_mutex_unlock(void)/g' techpack/audio/asoc/codecs/fs19xx/fsm_i2c.c
+
+          # Fix 2: Create dummy focaltech firmware file so it stops complaining
+          mkdir -p drivers/input/touchscreen/focaltech_touch_spi/include/firmware
+          touch drivers/input/touchscreen/focaltech_touch_spi/include/firmware/fw_sample.i
+
+          # Fix 3: Fix KernelSU include path
+          # We create a symlink so <kernelsu/...> points to the actual directory
+          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu
           
           # 3. Setup Environment (Using LLD to fix the Linker warning)
           export ARCH=arm64
