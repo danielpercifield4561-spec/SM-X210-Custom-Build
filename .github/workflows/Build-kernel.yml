@@ -4,7 +4,8 @@ on:
 
 jobs:
   build-kernel:
-    runs-on: ubuntu-22.04
+    # ---> THE FIX: Downgraded to 20.04 to match Samsung's capability maps! <---
+    runs-on: ubuntu-20.04
 
     steps:
       - name: 📥 Checkout Source Code
@@ -24,8 +25,6 @@ jobs:
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
           
-          # ---> THE GITHUB WORKSPACE FIX <---
-          # This forces Kbuild to use the absolute, undeniable path to the files.
           echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers/kernelsu" >> drivers/kernelsu/Kbuild
           echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux" >> drivers/kernelsu/Kbuild
           echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux/include" >> drivers/kernelsu/Kbuild
@@ -40,7 +39,6 @@ jobs:
           mkdir -p include/kernelsu
           ln -sf ${GITHUB_WORKSPACE}/drivers/kernelsu ${GITHUB_WORKSPACE}/include/kernelsu || true
           
-          # Brute force copy KSU headers
           cp drivers/kernelsu/*.h drivers/kernelsu/kernel/ || true
 
       - name: 🩹 Apply Deep Source Code Fixes
@@ -50,7 +48,6 @@ jobs:
           ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm || true
           sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' kernel/sched/walt/trace.h || true
           
-          # Focaltech Dummy Firmware Fix
           mkdir -p drivers/input/touchscreen/focaltech_touch_spi/include/firmware
           touch drivers/input/touchscreen/focaltech_touch_spi/include/firmware/fw_sample.i || true
 
@@ -59,7 +56,6 @@ jobs:
           export ARCH=arm64
           make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
           
-          # Apply Security & Root configs
           ./scripts/config --file .config --disable SECURITY_DEFEX
           ./scripts/config --file .config --disable SEC_RESTRICT_FORK
           ./scripts/config --file .config --enable KSU
@@ -68,37 +64,23 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-      - name: 🔨 Generate SELinux Headers (The Local Forge)
+      - name: 🔨 Generate SELinux Headers (The Clean Forge)
         run: |
+          # With Ubuntu 20.04, we can compile this cleanly without sed hacks!
           make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
-          
-          echo "Bypassing Kbuild to manually generate flask.h and av_permissions.h..."
           mkdir -p security/selinux/include
           
           GEN_C=$(find scripts/selinux -name "genheaders.c" | head -n 1)
           CLASSMAP=$(find security/selinux -name "classmap.h" | head -n 1)
           INITIAL_SID=$(find security/selinux -name "initial_sid_to_string.h" | head -n 1)
           
-          echo "Compiling $GEN_C..."
-          # We purposefully DO NOT pass -Iinclude here. This forces gcc to use Ubuntu's clean host headers and prevents the massive header clash!
-          if ! gcc -Isecurity/selinux -Isecurity/selinux/include "$GEN_C" -o selinux_gen; then
-            echo "Standard host compilation failed. Stripping raw kernel includes from classmap.h and forcing compile..."
-            sed -i 's/#include <linux\/socket.h>//g' "$CLASSMAP" || true
-            sed -i 's/#include <linux\/capability.h>//g' "$CLASSMAP" || true
-            sed -i '1i #define PF_MAX 45' "$CLASSMAP" || true
-            gcc -Isecurity/selinux -Isecurity/selinux/include "$GEN_C" -o selinux_gen
-          fi
-          
-          echo "Running SELinux generator..."
+          echo "Compiling generator natively on Ubuntu 20.04..."
+          gcc -Isecurity/selinux/include -Iinclude "$GEN_C" -o selinux_gen
           ./selinux_gen "$CLASSMAP" "$INITIAL_SID" security/selinux/include/flask.h security/selinux/include/av_permissions.h
           
-          echo "Deploying generated headers to KernelSU..."
-          cp security/selinux/include/flask.h drivers/kernelsu/ || true
-          cp security/selinux/include/av_permissions.h drivers/kernelsu/ || true
-          cp security/selinux/include/flask.h drivers/kernelsu/kernel/ || true
-          cp security/selinux/include/av_permissions.h drivers/kernelsu/kernel/ || true
-
-
+          echo "Deploying generated Samsung headers..."
+          cp security/selinux/include/*.h drivers/kernelsu/ || true
+          cp security/selinux/include/*.h drivers/kernelsu/kernel/ || true
 
       - name: 🔨 Compile Kernel (The Main Build)
         run: |
@@ -125,3 +107,4 @@ jobs:
         with:
           name: TabA9Plus-KSU-Kernel
           path: Final_Kernel/TabA9Plus-KSU-Kernel.tar
+
