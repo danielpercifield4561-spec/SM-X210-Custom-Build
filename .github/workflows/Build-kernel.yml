@@ -58,10 +58,19 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-      - name: 🔨 Compile Kernel (The Big Hammer)
+            - name: 🔨 Compile Kernel (The Big Hammer)
         run: |
-          # Notice the new '-I$(pwd)/drivers' flag in KCFLAGS.
-          # This guarantees input.c will find <kernelsu/kernel/ksu.h>
+          # 1. Pre-compile the security folder to generate flask.h (Fixes the Race Condition)
+          make ARCH=arm64 \
+          CC="clang --target=aarch64-linux-gnu" \
+          REAL_CC="clang --target=aarch64-linux-gnu" \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          LD=ld.lld \
+          HOSTCC=gcc \
+          CC_FOR_BUILD=gcc \
+          -j$(nproc --all) security/
+          
+          # 2. The Main Build (Added SELinux include path to KCFLAGS)
           make ARCH=arm64 \
           CC="clang --target=aarch64-linux-gnu" \
           REAL_CC="clang --target=aarch64-linux-gnu" \
@@ -71,7 +80,8 @@ jobs:
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-I$(pwd)/drivers -I$(pwd)/drivers/kernelsu -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+          KCFLAGS="-I$(pwd)/drivers -I$(pwd)/drivers/kernelsu -I$(pwd)/security/selinux/include -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+
 
       - name: 📦 Package Output for Flashing
         run: |
