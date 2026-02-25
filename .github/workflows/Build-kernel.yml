@@ -24,20 +24,39 @@ jobs:
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
           
-          # ---> THE SINGLE QUOTE FIX <---
-          # By using single quotes, we pass the EXACT $(srctree) variable to Kbuild without GitHub altering it.
-          echo 'ccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include' >> drivers/kernelsu/Kbuild
-          echo 'ccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include' >> drivers/kernelsu/Makefile
+          # ---> THE GITHUB WORKSPACE FIX <---
+          # This forces Kbuild to use the absolute, undeniable path to the files.
+          echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers/kernelsu" >> drivers/kernelsu/Kbuild
+          echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux" >> drivers/kernelsu/Kbuild
+          echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux/include" >> drivers/kernelsu/Kbuild
           
-          # Fix for input.c
-          echo 'ccflags-y += -I$(srctree)/drivers' >> drivers/input/Makefile || true
-          echo 'ccflags-y += -I$(srctree)/drivers' >> drivers/input/Kbuild || true
+          echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers/kernelsu" >> drivers/kernelsu/Makefile
+          echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux" >> drivers/kernelsu/Makefile
+          echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux/include" >> drivers/kernelsu/Makefile
+          
+          echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers" >> drivers/input/Makefile || true
+          echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers" >> drivers/input/Kbuild || true
           
           mkdir -p include/kernelsu
-          ln -sf $(pwd)/drivers/kernelsu $(pwd)/include/kernelsu || true
+          ln -sf ${GITHUB_WORKSPACE}/drivers/kernelsu ${GITHUB_WORKSPACE}/include/kernelsu || true
           
           # Brute force copy KSU headers
           cp drivers/kernelsu/*.h drivers/kernelsu/kernel/ || true
+
+      - name: 🔨 Generate SELinux Headers (The Targeted Strike)
+        run: |
+          # 1. Generate the core scripts needed to run the header generator
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) scripts
+          
+          # 2. FORCE GENERATE SPECIFIC HEADERS
+          # We are commanding the kernel to build ONLY these two files, bypassing the rest of the folder!
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/flask.h
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/av_permissions.h
+          
+          # 3. Physically move them so objsec.h can't miss them
+          cp security/selinux/flask.h security/selinux/include/ || true
+          cp security/selinux/av_permissions.h security/selinux/include/ || true
 
       - name: 🩹 Apply Deep Source Code Fixes
         run: |
@@ -64,31 +83,8 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-      - name: 🔨 Compile Kernel (The Master Sequencer)
+      - name: 🔨 Compile Kernel (The Main Build)
         run: |
-          # 1. PREPARE: Generate core headers and scripts
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" REAL_CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" REAL_CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) scripts
-          
-          # 2. FORCE SELINUX TO BUILD: This generates flask.h somewhere on the drive
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" REAL_CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) security/selinux/ || true
-          
-          # 3. THE FLASK.H RESCUE OPERATION
-          # We locate flask.h and av_permissions.h and physically shove them into the include folder!
-          FLASK_FILE=$(find . -name flask.h | head -n 1)
-          AV_FILE=$(find . -name av_permissions.h | head -n 1)
-          
-          if [ -n "$FLASK_FILE" ]; then
-            echo "Found flask.h at: $FLASK_FILE"
-            cp "$FLASK_FILE" security/selinux/include/ || true
-            cp "$FLASK_FILE" drivers/kernelsu/ || true
-          fi
-          
-          if [ -n "$AV_FILE" ]; then
-            cp "$AV_FILE" security/selinux/include/ || true
-          fi
-          
-          # 4. MAIN BUILD: With flask.h physically locked in place, we compile the rest!
           make ARCH=arm64 \
           CC="clang --target=aarch64-linux-gnu" \
           REAL_CC="clang --target=aarch64-linux-gnu" \
@@ -98,7 +94,7 @@ jobs:
           CC_FOR_BUILD=gcc \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           -j$(nproc --all) \
-          KCFLAGS="-Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
+          KCFLAGS="-I${GITHUB_WORKSPACE}/drivers/kernelsu -I${GITHUB_WORKSPACE}/security/selinux -I${GITHUB_WORKSPACE}/security/selinux/include -I${GITHUB_WORKSPACE}/drivers -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
           
       - name: 📦 Package Output for Flashing
         run: |
