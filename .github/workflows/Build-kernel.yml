@@ -68,24 +68,33 @@ jobs:
           
           make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
 
-      - name: 🔨 Generate SELinux Headers (The Targeted Strike)
+      - name: 🔨 Generate SELinux Headers (The Surgical Strike)
         run: |
           # 1. Generate the core scripts needed to run the header generator
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) scripts
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" REAL_CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" REAL_CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) scripts
           
-          # 2. FORCE GENERATE SPECIFIC HEADERS
-          # We are commanding the kernel to build ONLY these two files, bypassing the rest of the folder!
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/flask.h || true
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/av_permissions.h || true
+          # 2. THE SURGICAL STRIKE
+          # We force it to build the SELinux archive. This forces Kbuild to automatically run the flask.h generator script!
+          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" REAL_CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/built-in.a || true
           
-          # Fallback: Just build the SELinux folder without multi-threading to avoid internal race conditions
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc security/selinux/ || true
+          # 3. Find where it hid them and physically shove them into the KSU folder
+          FLASK=$(find . -name flask.h | head -n 1)
+          AV=$(find . -name av_permissions.h | head -n 1)
           
-          # 3. Physically move them so objsec.h can't miss them
-          mkdir -p security/selinux/include/
-          cp security/selinux/flask.h security/selinux/include/ || true
-          cp security/selinux/av_permissions.h security/selinux/include/ || true
+          if [ -n "$FLASK" ]; then
+            echo "SUCCESS: Found flask.h at $FLASK"
+            cp "$FLASK" drivers/kernelsu/ || true
+            mkdir -p security/selinux/include/
+            cp "$FLASK" security/selinux/include/ || true
+          else
+            echo "ERROR: flask.h STILL NOT GENERATED!"
+          fi
+          
+          if [ -n "$AV" ]; then
+            cp "$AV" drivers/kernelsu/ || true
+            cp "$AV" security/selinux/include/ || true
+          fi
 
       - name: 🔨 Compile Kernel (The Main Build)
         run: |
