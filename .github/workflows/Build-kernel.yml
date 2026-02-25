@@ -73,18 +73,19 @@ jobs:
           # 1. Prepare core headers
           make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
           
-          echo "Bypassing broken Kbuild and host compilers entirely."
+          echo "Bypassing broken Kbuild and fetching standard SELinux headers..."
           mkdir -p security/selinux/include
           
-          # 2. Fetch standard mainline Android/Linux SELinux headers (v5.15)
-          wget -q https://raw.githubusercontent.com/torvalds/linux/v5.15/security/selinux/include/flask.h -O security/selinux/include/flask.h
-          wget -q https://raw.githubusercontent.com/torvalds/linux/v5.15/security/selinux/include/av_permissions.h -O security/selinux/include/av_permissions.h
+          # 2. THE TIME MACHINE: Fetch headers from v4.14 before they were deleted from Linux!
+          wget -q https://raw.githubusercontent.com/torvalds/linux/v4.14/security/selinux/include/flask.h -O security/selinux/include/flask.h
+          wget -q https://raw.githubusercontent.com/torvalds/linux/v4.14/security/selinux/include/av_permissions.h -O security/selinux/include/av_permissions.h
           
           # 3. Copy them literally everywhere KernelSU might look
           cp security/selinux/include/flask.h drivers/kernelsu/ || true
           cp security/selinux/include/av_permissions.h drivers/kernelsu/ || true
           cp security/selinux/include/flask.h drivers/kernelsu/kernel/ || true
           cp security/selinux/include/av_permissions.h drivers/kernelsu/kernel/ || true
+
 
       - name: 🔨 Compile Kernel (The Main Build)
         run: |
