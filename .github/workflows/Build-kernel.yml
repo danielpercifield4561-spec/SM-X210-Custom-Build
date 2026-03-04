@@ -19,7 +19,7 @@ jobs:
         run: |
           # 🛑 FIX: Strip 'q' from GKI (Force standard GKI identity)
           # This replaces 'qgki' with 'gki' in the config and Makefiles
-          find . -type f -name "gta9pwifi_eur_open_defconfig" -exec sed -i 's/qgki/gki/g' {} + || true
+          find . -type f -name "vendor/gta9pwifi_eur_open_defconfig" -exec sed -i 's/qgki/gki/g' {} + || true
           sed -i 's/qgki/gki/g' Makefile || true
           
           # 🛑 FIX: WALT TRACING Path
@@ -38,7 +38,7 @@ jobs:
       - name: ⚙️ Kernel Config & Hardware Force-In
         run: |
           # Use the patched defconfig
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- gta9pwifi_eur_open_defconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/gta9pwifi_eur_open_defconfig
           
           # Force WiFi and Sensors to be Built-in
           ./scripts/config --file .config --enable CONFIG_WLAN
