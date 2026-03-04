@@ -4,107 +4,148 @@ on:
 
 jobs:
   build-kernel:
-    # ---> THE FIX: Downgraded to 20.04 to match Samsung's capability maps! <---
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Source Code
+      - name: 🛠️ Prepare Environment
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang llvm lld gcc-aarch64-linux-gnu tar zip wget python3 cpio xz-utils ccache curl dos2unix
+          
+      - name: 📥 Checkout Kernel Source
         uses: actions/checkout@v4
 
-      - name: 🛠️ Install Toolchain & Dependencies
+      - name: 🗄️ Restore Compiler Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ksu-ccache-${{ github.run_id }}
+          restore-keys: |
+            ksu-ccache-
+ 
+      - name: 📥 Integrate KernelSU-Next
         run: |
-          sudo apt-get update
-          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang llvm lld gcc-aarch64-linux-gnu tar zip
-
-      - name: 📁 Setup & Permissions
-        run: |
-          find scripts/ -type f -exec chmod +x {} + || true
-          chmod +x scripts/gcc-wrapper.py || true
-          
-          if ! grep -q "kernelsu" drivers/Makefile; then
-            echo 'obj-y += kernelsu/' >> drivers/Makefile
+          rm -rf drivers/kernelsu
+          if ! grep -q "kernel/ certs/ mm/" Makefile; then
+              sed -i '/core-y.*:=.*init/a core-y += kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/' Makefile
           fi
+          git clone -b legacy https://github.com/KernelSU-Next/KernelSU-Next /tmp/ksun
+          mv /tmp/ksun/kernel drivers/kernelsu
+          sed -i '/kernelsu/d' drivers/Makefile || true
+          echo "obj-y += kernelsu/" >> drivers/Makefile
           
-          echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers/kernelsu" >> drivers/kernelsu/Kbuild
-          echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux" >> drivers/kernelsu/Kbuild
-          echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux/include" >> drivers/kernelsu/Kbuild
-          
-          echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers/kernelsu" >> drivers/kernelsu/Makefile
-          echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux" >> drivers/kernelsu/Makefile
-          echo "ccflags-y += -I${GITHUB_WORKSPACE}/security/selinux/include" >> drivers/kernelsu/Makefile
-          
-          echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers" >> drivers/input/Makefile || true
-          echo "ccflags-y += -I${GITHUB_WORKSPACE}/drivers" >> drivers/input/Kbuild || true
-          
-          mkdir -p include/kernelsu
-          ln -sf ${GITHUB_WORKSPACE}/drivers/kernelsu ${GITHUB_WORKSPACE}/include/kernelsu || true
-          
-          cp drivers/kernelsu/*.h drivers/kernelsu/kernel/ || true
-
+          # 🔗 THE FIX: Link KernelSU's config into the main kernel config tree
+          sed -i '/kernelsu/d' drivers/Kconfig || true
+          echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+     
       - name: 🩹 Apply Deep Source Code Fixes
         run: |
-          sed -i 's|register unsigned long current_stack_pointer asm ("sp");|/* Removed global sp */ #define current_stack_pointer ({ unsigned long sp; asm("mov %0, sp" : "=r"(sp)); sp; })|g' arch/arm64/include/asm/stack_pointer.h || true
-          sed -i 's|"brk %0" : : "I"|"brk %0" : : "n"|g' arch/arm64/include/asm/kgdb.h || true
-          ln -sf $(pwd)/arch/arm64/include/asm $(pwd)/include/asm || true
-          sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' kernel/sched/walt/trace.h || true
+          # 1. FIX PERMISSIONS & LINE ENDINGS
+          chmod -R +x scripts/
+          find . -type f -name "*.sh" -exec chmod +x {} +
+          find . -type f -name "Kconfig*" -exec dos2unix {} +
+          # 2. FIX DEPRECATED PROTOTYPES (The 'void' errors)
+          sed -i 's/static int get_boot_mode()/static int get_boot_mode(void)/g' drivers/power/supply/wt_charger/wt_chg.c || true
+          sed -i 's/static struct icnss_priv \*icnss_get_plat_priv()/static struct icnss_priv \*icnss_get_plat_priv(void)/g' drivers/soc/qcom/icnss2/main.c || true
           
-          mkdir -p drivers/input/touchscreen/focaltech_touch_spi/include/firmware
-          touch drivers/input/touchscreen/focaltech_touch_spi/include/firmware/fw_sample.i || true
+          # 3. FIX FS/EXEC.C (Clean injection)
+          sed -i '/ksu_handle_execveat/d' fs/exec.c
+          sed -i '/static int do_execveat_common(int fd, struct filename \*filename,/,/{/ s/{/{\n\tksu_handle_execveat(\&fd, \&filename, \&argv, \&envp, \&flags);\n\tksu_handle_execveat_sucompat(\&fd, \&filename, \&argv, \&envp, \&flags);/' fs/exec.c
+          # 4. FIX IMPLICIT DECLARATIONS
+          for file in fs/open.c fs/read_write.c fs/stat.c fs/exec.c; do
+            sed -i '/ksu.h/d' "$file" 
+            sed -i '1i #include <kernelsu/ksu.h>' "$file"
+          done
+          # 5. USB HEADER FIX (Native approach)
+          # Inject the missing interrupt header, but do NOT move files. The compiler will handle paths natively.
+          find drivers/usb/typec -name "tcpci.h" -exec sed -i '1i #include <linux/interrupt.h>' {} + || true
+          # 6. SAMSUNG & TECHPACK TYPOS
+          find techpack/display -name "*.c" -exec sed -i 's/static inline _/static inline u32 _/g' {} +
+          sed -i 's/static md_align_offset/static int md_align_offset/g' drivers/soc/qcom/minidump_log.c || true
+          
+          # 7. ARCHITECTURE & ZRAM FIXES
+          sed -i '/extern unsigned long vdso_offset_/d' arch/arm64/include/asm/vdso.h || true
+          sed -i '/#define TRACE_INCLUDE_PATH/c\#define TRACE_INCLUDE_PATH ../../kernel/sched/walt' kernel/sched/walt/trace.h || true
+          sed -i 's|register unsigned long current_stack_pointer asm ("sp");|#define current_stack_pointer ({ unsigned long sp; asm("mov %0, sp" : "=r"(sp)); sp; })|g' arch/arm64/include/asm/stack_pointer.h || true
+          
+          # 8. KERNELSU COMPATIBILITY & SECCOMP FIX
+          mkdir -p drivers/kernelsu/kernel
+          cp drivers/kernelsu/ksu.h drivers/kernelsu/kernel/ksu.h || true
+          sed -i 's/if (!!!current->seccomp.mode)/if (0)/g' drivers/kernelsu/app_profile.c || true
+          sed -i 's/.*current->seccomp.mode =.*/\/\/ mode reset/g' drivers/kernelsu/app_profile.c || true
+          sed -i 's/.*current->seccomp.filter =.*/\/\/ filter reset/g' drivers/kernelsu/app_profile.c || true
+          sed -i 's/struct selinux_state/struct ksu_selinux_state/g' drivers/kernelsu/selinux/selinux.h || true
+          sed -i 's/struct selinux_state/struct ksu_selinux_state/g' drivers/kernelsu/selinux/selinux.c || true
+          
+          # Force Manual Hook bypass in KSU Makefiles
+          sed -i '1i CONFIG_KSU_MANUAL_HOOK := y' drivers/kernelsu/Kbuild || true
+          sed -i '1i CONFIG_KSU_MANUAL_HOOK := y' drivers/kernelsu/Makefile || true
+          sed -i '/No hooks were defined/d' drivers/kernelsu/Kbuild || true
 
-      - name: ⚙️ Generate Kernel Configuration
+          # 🛑 FIX: Strip 'q' from GKI (Force standard GKI identity)
+          sed -i 's/qgki/gki/g' arch/arm64/configs/gta9pwifi_eur_open_defconfig || true
+          sed -i 's/qgki/gki/g' Makefile || true
+
+      - name: 🔑 Nuclear Export Symbols
+        run: |
+          nuclear_export() {
+              local sym=$1
+              local file=$(grep -lE "^static.* $sym|^struct.* $sym|^int.* $sym|^void.* $sym" security/selinux/*.c security/selinux/ss/*.c fs/*.c drivers/kernelsu/*.c 2>/dev/null | head -n 1)
+              if [ -n "$file" ]; then
+                  sed -i "s/^static //g" "$file"
+                  sed -i "s/^static inline //g" "$file"
+                  echo "EXPORT_SYMBOL_GPL($sym);" >> "$file"
+              fi
+          }
+          nuclear_export "selinux_state"
+          nuclear_export "selinux_blob_sizes"
+          nuclear_export "hashtab_search"
+          nuclear_export "hashtab_insert"
+          nuclear_export "do_umount"
+      - name: ⚙️ Kernel Config
         run: |
           export ARCH=arm64
-          make ARCH=arm64 HOSTCC=gcc CC=gcc vendor/gta9pwifi_eur_open_defconfig
-          
-          ./scripts/config --file .config --disable SECURITY_DEFEX
-          ./scripts/config --file .config --disable SEC_RESTRICT_FORK
+          make ARCH=arm64 HOSTCC=gcc CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- gta9pwifi_eur_open_defconfig
           ./scripts/config --file .config --enable KSU
           ./scripts/config --file .config --enable KSU_NEXT
-          ./scripts/config --file .config --enable KSU_NEXT_MANUAL_HOOK
-          
-          make ARCH=arm64 HOSTCC=gcc CC=gcc olddefconfig
-
-      - name: 🔨 Generate SELinux Headers (The Clean Forge)
+          ./scripts/config --file .config --enable KSU_MANUAL_HOOK
+          ./scripts/config --file .config --disable LTO_CLANG
+          ./scripts/config --file .config --disable TRIM_UNUSED_KSYMS
+          yes "" | make ARCH=arm64 HOSTCC=gcc CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+   
+      - name: 🔨 Compile
         run: |
-          # With Ubuntu 20.04, we can compile this cleanly without sed hacks!
-          make ARCH=arm64 CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=aarch64-linux-gnu- HOSTCC=gcc CC_FOR_BUILD=gcc -j$(nproc --all) prepare
-          mkdir -p security/selinux/include
           
-          GEN_C=$(find scripts/selinux -name "genheaders.c" | head -n 1)
-          CLASSMAP=$(find security/selinux -name "classmap.h" | head -n 1)
-          INITIAL_SID=$(find security/selinux -name "initial_sid_to_string.h" | head -n 1)
+          FLAGS="ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 HOSTCC=gcc CC=clang -j$(nproc --all)"
           
-          echo "Compiling generator natively on Ubuntu 20.04..."
-          gcc -Isecurity/selinux/include -Iinclude "$GEN_C" -o selinux_gen
-          ./selinux_gen "$CLASSMAP" "$INITIAL_SID" security/selinux/include/flask.h security/selinux/include/av_permissions.h
+          # 🛑 THE FAKE ID FIX: Force Samsung's exact Wi-Fi/Bluetooth string
+          echo "-28972655-abX210XXS6CYB9" > .scmversion
+          sed -i 's/echo "-dirty"/echo ""/g' scripts/setlocalversion || true
           
-          echo "Deploying generated Samsung headers..."
-          cp security/selinux/include/*.h drivers/kernelsu/ || true
-          cp security/selinux/include/*.h drivers/kernelsu/kernel/ || true
-
-      - name: 🔨 Compile Kernel (The Main Build)
+          K_INC="-I$(pwd)/security/selinux -I$(pwd)/security/selinux/include -I$(pwd)/drivers -I$(pwd)/drivers/usb/typec/P86801_tcpc -I$(pwd)/drivers/usb/typec/P86801_tcpc/inc"
+          
+          # Injected -DKSU_NEXT=1 to guarantee the manager recognizes the Next variant
+          K_CFLAGS="-DCONFIG_SECURITY_SELINUX_SIDTAB_HASH_BITS=9 -DCONFIG_KSU=1 -DCONFIG_KSU_NEXT=1 -DKSU_NEXT=1 -DCONFIG_KSU_MANUAL_HOOK=1 -Wno-error=implicit-function-declaration -Wno-error=strict-prototypes -Wno-error=implicit-int -Wno-error=int-conversion -Wno-error=declaration-after-statement -Wno-error=unused-variable -Wno-error=unused-but-set-variable -Wno-error=unused-function -Wno-error=undef -Wno-error=visibility $K_INC"
+          
+          make $FLAGS Image KCFLAGS="$K_CFLAGS" || {
+              rm -f fs/namespace.o security/selinux/*.o drivers/kernelsu/*.o
+              make $FLAGS Image KCFLAGS="$K_CFLAGS"
+          }
+          
+      - name: 📦 Package Output
         run: |
-          make ARCH=arm64 \
-          CC="clang --target=aarch64-linux-gnu" \
-          REAL_CC="clang --target=aarch64-linux-gnu" \
-          CROSS_COMPILE=aarch64-linux-gnu- \
-          LD=ld.lld \
-          HOSTCC=gcc \
-          CC_FOR_BUILD=gcc \
-          CLANG_TRIPLE=aarch64-linux-gnu- \
-          -j$(nproc --all) \
-          KCFLAGS="-I${GITHUB_WORKSPACE}/drivers/kernelsu -I${GITHUB_WORKSPACE}/security/selinux -I${GITHUB_WORKSPACE}/security/selinux/include -I${GITHUB_WORKSPACE}/drivers -Wno-error=frame-larger-than= -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-enum-conversion"
-
-      - name: 📦 Package Output for Flashing
-        run: |
-          mkdir -p Final_Kernel
-          cp arch/arm64/boot/Image Final_Kernel/ || true
-          cd Final_Kernel
-          tar -cvf TabA9Plus-KSU-Kernel.tar Image || true
-          
+          if [ -f arch/arm64/boot/Image ]; then
+            git clone https://github.com/osm0sis/AnyKernel3.git
+            sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+            cp arch/arm64/boot/Image AnyKernel3/
+            cd AnyKernel3 && zip -r9 ../TabA9Plus-KSU-Kernel.zip *
+          else
+            exit 1
+          fi
+    
       - name: 📤 Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TabA9Plus-KSU-Kernel
-          path: Final_Kernel/TabA9Plus-KSU-Kernel.tar
-
+          name: TabA9Plus-Kernel
+          path: TabA9Plus-KSU-Kernel.zip
